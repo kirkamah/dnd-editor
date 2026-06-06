@@ -96,9 +96,9 @@ const dict: Record<string, { ru: string; en: string }> = {
 
   // сцена
   sceneProps: { ru: 'Сцена', en: 'Scene' },
-  frameLayer: { ru: 'Рамка (поверх всего)', en: 'Frame (on top)' },
-  bgLayer: { ru: 'Фон', en: 'Background' },
-  bricksLayer: { ru: 'Перекрытие с прозрачностью (кирпичи)', en: 'Opacity wall (bricks)' },
+  frameLayer: { ru: 'Рамка портретов (наивысший слой)', en: 'Portrait frame (topmost layer)' },
+  bgLayer: { ru: 'Рамка фона (под портретами)', en: 'Background frame (under portraits)' },
+  bricksLayer: { ru: 'Переключаемый фон — кирпичи (самый нижний)', en: 'Switchable wall — bricks (bottom)' },
   uploadFile: { ru: 'Загрузить', en: 'Upload' },
   removeFile: { ru: 'Убрать', en: 'Remove' },
   notSet: { ru: 'не задано', en: 'not set' },
@@ -108,15 +108,31 @@ const dict: Record<string, { ru: string; en: string }> = {
   borderWidth: { ru: 'Толщина обводки', en: 'Border width' },
   cornerRadius: { ru: 'Скругление углов', en: 'Corner radius' },
   bricksHint: {
-    ru: 'Прозрачность перекрытия меняется по ключам сцены (+ Ключ).',
-    en: 'Wall opacity is keyframed via scene cues (+ Cue).',
+    ru: 'Прозрачность кирпичей меняется по ключам сцены (+ Ключ). Кирпичи видны сквозь прозрачные места рамки фона.',
+    en: 'Bricks opacity is keyframed via scene cues (+ Cue). Bricks show through transparent areas of the background frame.',
   },
+  radiusHint: {
+    ru: 'Большое значение скругляет портрет до полного круга.',
+    en: 'Large values round the portrait into a full circle.',
+  },
+  lockFrame: { ru: 'Заблокировать рамку', en: 'Lock frame' },
+  frameHint: {
+    ru: 'Пока рамка не на замке, её можно таскать и растягивать прямо на превью. Заблокируй — и клики снова попадают по портретам под ней.',
+    en: 'While unlocked, drag and resize the frame right on the preview. Lock it and clicks go through to portraits beneath.',
+  },
+  phraseVolume: { ru: 'Громкость этой фразы', en: 'This phrase volume' },
+  glowEnabled: { ru: 'Свечение при речи', en: 'Glow while speaking' },
+  glowColor: { ru: 'Цвет свечения', en: 'Glow color' },
+  glowSize: { ru: 'Размах свечения', en: 'Glow size' },
 
   // настройки
   settingsTitle: { ru: 'Настройки', en: 'Settings' },
   theme: { ru: 'Тема', en: 'Theme' },
   themeDark: { ru: 'Тёмная', en: 'Dark' },
   themeLight: { ru: 'Светлая', en: 'Light' },
+  themeSpace: { ru: 'Космос', en: 'Space' },
+  author: { ru: 'Автор', en: 'Author' },
+  rights: { ru: '© 2026 · Все права защищены', en: '© 2026 · All rights reserved' },
   language: { ru: 'Язык / Language', en: 'Language / Язык' },
   defaultExportDir: { ru: 'Папка экспорта по умолчанию', en: 'Default export folder' },
   defaultExportDirHint: {

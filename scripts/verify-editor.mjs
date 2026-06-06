@@ -57,8 +57,9 @@ try {
     const ev = m.speakingEvents[0];
     window.__test.splitSpeech(1, m.speakingEvents[1].startMs + 400); // разрезать вторую
     void ev;
-    window.__test.setPortraitLayout(u, { x: 600, y: 100, w: 500, h: 500 });
-    window.__test.setStyle({ borderColor: '#ff0000', borderWidth: 6, radius: 30 });
+    window.__test.setPortraitLayout(u, { x: 600, y: 100, w: 500, h: 500, glow: false, glowSize: 50 });
+    window.__test.setStyle({ borderColor: '#ff0000', borderWidth: 6, radius: 300 }); // 300 -> кламп до круга
+    window.__test.setPhraseGain(0, 0.4);
   }, uid);
 
   const m = await page.evaluate(() => window.__test.manifest());
@@ -71,16 +72,17 @@ try {
   if (!m.speakingEvents.some((e) => typeof e.srcStartMs === 'number'))
     failures.push('split: srcStartMs не записался');
   if (m.edit?.layout?.[uid]?.w !== 500) failures.push('layout портрета не применился');
+  if (m.edit?.layout?.[uid]?.glow !== false) failures.push('настройка свечения не применилась');
   if (m.edit?.style?.borderColor !== '#ff0000') failures.push('стиль обводки не применился');
-  if (m.formatVersion !== '1.0') void 0; // версия станет 1.2 при сохранении
-  ok('правки: cue, музыка, картинка, громкость, split (+srcStartMs), layout, стиль');
+  if (m.speakingEvents[0]?.gain !== 0.4) failures.push('громкость фразы не применилась');
+  ok('правки: cue, музыка, картинка, громкости (дорожка+фраза), split, layout, glow, стиль');
 
   await page.screenshot({ path: '.verify/editor-overlay.png' });
 
   // сохранение
   await page.evaluate((p) => window.__test.save(p), savedBundle);
   const m2 = await page.evaluate(() => window.__test.manifest());
-  if (m2.formatVersion !== '1.2') failures.push(`после сохранения formatVersion ${m2.formatVersion}, ожидалось 1.2`);
+  if (m2.formatVersion !== '1.3') failures.push(`после сохранения formatVersion ${m2.formatVersion}, ожидалось 1.3`);
   ok(`сохранено (v${m2.formatVersion}): ${(fs.statSync(savedBundle).size / 1024 / 1024).toFixed(1)} МБ`);
 
   // экспорт (оба режима)

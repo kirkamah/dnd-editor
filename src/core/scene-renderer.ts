@@ -4,7 +4,9 @@
  * рендера слоёв с прозрачным фоном — им пользуется экспорт под After Effects
  * (каждый слой отдельным видео с альфой).
  *
- * Слои снизу вверх: background -> bricks -> frame -> portraits -> overlays.
+ * Слои снизу вверх (v1.3): bricks (переключаемая стена) -> background (рамка
+ * фона, может иметь прозрачное окно) -> portraits -> overlays -> frame
+ * (рамка портретов — наивысший слой).
  */
 import type { LoadedScene } from './bundle-loader';
 import type { ParticipantEntry, PlayerSlot } from './types';
@@ -121,10 +123,10 @@ export class SceneRenderer {
     ctx.save();
 
     if (opts.transparent) ctx.clearRect(0, 0, SCENE_W, SCENE_H);
+    else this.drawBase();
 
-    if (layers.has('background')) this.drawBackground(state, !!opts.transparent);
     if (layers.has('bricks')) this.drawBricks(state);
-    if (layers.has('frame')) this.drawFrame();
+    if (layers.has('background')) this.drawBackground(state);
     if (layers.has('portraits')) {
       for (const [p, box] of this.placed) {
         if (!box.hidden) this.drawPortrait(p, box, state.speaking.has(p.userId));
@@ -133,8 +135,19 @@ export class SceneRenderer {
     if (layers.has('overlays')) {
       for (const ov of state.overlays) this.drawOverlay(ov);
     }
+    if (layers.has('frame')) this.drawFrame(); // рамка портретов — наивысший слой
 
     ctx.restore();
+  }
+
+  /** Базовая заливка под всеми слоями (видна сквозь прозрачные окна). */
+  private drawBase(): void {
+    const { ctx } = this;
+    const g = ctx.createLinearGradient(0, 0, 0, SCENE_H);
+    g.addColorStop(0, '#16191f');
+    g.addColorStop(1, '#0b0d11');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, SCENE_W, SCENE_H);
   }
 
   private drawOverlay(ov: {
@@ -154,18 +167,11 @@ export class SceneRenderer {
     ctx.restore();
   }
 
-  private drawBackground(state: SceneState, transparent: boolean): void {
-    const { ctx } = this;
+  private drawBackground(state: SceneState): void {
     const img = state.background ? this.scene.images.get(state.background) : undefined;
-    if (img) {
-      drawCover(ctx, img, 0, 0, SCENE_W, SCENE_H);
-    } else if (!transparent) {
-      const g = ctx.createLinearGradient(0, 0, 0, SCENE_H);
-      g.addColorStop(0, '#16191f');
-      g.addColorStop(1, '#0b0d11');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, SCENE_W, SCENE_H);
-    }
+    // drawImage (не cover-кроп): рамка фона может иметь прозрачное окно,
+    // сквозь которое виден слой bricks — растягиваем на всю сцену как есть.
+    if (img) this.ctx.drawImage(img, 0, 0, SCENE_W, SCENE_H);
   }
 
   private drawBricks(state: SceneState): void {
@@ -184,7 +190,12 @@ export class SceneRenderer {
   private drawFrame(): void {
     const ref = this.scene.manifest.layers?.frame;
     const img = ref ? this.scene.images.get(ref) : undefined;
-    if (img) this.ctx.drawImage(img, 0, 0, SCENE_W, SCENE_H);
+    if (!img) return;
+    // v1.3: рамка может иметь своё положение/размер (edit.frameBox);
+    // без него — на всю сцену, как в старых бандлах
+    const fb = this.scene.manifest.edit?.frameBox;
+    if (fb) this.ctx.drawImage(img, fb.x, fb.y, fb.w, fb.h);
+    else this.ctx.drawImage(img, 0, 0, SCENE_W, SCENE_H);
   }
 
   private drawPortrait(p: ParticipantEntry, box: Box, speaking: boolean): void {
@@ -192,15 +203,21 @@ export class SceneRenderer {
     const artRef = speaking ? (p.art?.speaking ?? p.art?.idle) : p.art?.idle;
     const img = artRef ? this.scene.images.get(artRef) : undefined;
     const style = this.scene.manifest.edit?.style;
-    const r = style?.radius ?? 14;
+    // радиус клампится до полного круга
+    const r = Math.min(style?.radius ?? 14, box.w / 2, box.h / 2);
     const speakColor = style?.speakingColor ?? ACCENT;
     const borderColor = style?.borderColor ?? '#39434f';
     const borderWidth = style?.borderWidth ?? 2;
+    // v1.3: per-портретные настройки свечения
+    const lay = this.scene.manifest.edit?.layout?.[p.userId];
+    const glowOn = lay?.glow ?? true;
+    const glowColor = lay?.glowColor ?? speakColor;
+    const glowSize = lay?.glowSize ?? 28;
 
     ctx.save();
-    if (speaking) {
-      ctx.shadowColor = speakColor;
-      ctx.shadowBlur = 28;
+    if (speaking && glowOn && glowSize > 0) {
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = glowSize;
     }
     ctx.fillStyle = '#10141a';
     roundRect(ctx, box.x, box.y, box.w, box.h, r);

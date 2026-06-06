@@ -150,6 +150,10 @@ export class Inspector {
     this.root.append(
       this.msField(t('begin'), ev.startMs, (v) => retime({ startMs: v })),
       this.msField(t('end'), ev.endMs, (v) => retime({ endMs: v })),
+      rangeField(t('phraseVolume'), ev.gain ?? 1, 0, 2, 0.01, (v) => {
+        this.editor.updateSpeakingEvent(i, { gain: v, srcStartMs: ev.srcStartMs ?? ev.startMs });
+        this.hooks.audioChanged();
+      }),
       dangerBtn(t('deletePhrase'), () => {
         this.editor.removeSpeakingEvent(i);
         this.hooks.setSelection(null);
@@ -164,6 +168,7 @@ export class Inspector {
     if (!p) return;
     const te = this.editor.trackEdit(userId);
     const box = this.editor.portraitBox(userId);
+    const lay = this.scene.manifest.edit?.layout?.[userId];
     const layout = (patch: Parameters<EditorState['setPortraitLayout']>[1]) => {
       this.editor.setPortraitLayout(userId, patch);
       this.hooks.refresh();
@@ -192,6 +197,11 @@ export class Inspector {
         numField(t('height'), box.h, (v) => layout({ h: v })),
       ),
       checkField(t('hidePortrait'), box.hidden ?? false, (v) => layout({ hidden: v })),
+      checkField(t('glowEnabled'), lay?.glow ?? true, (v) => layout({ glow: v })),
+      colorField(t('glowColor'), lay?.glowColor ?? this.scene.manifest.edit?.style?.speakingColor ?? '#2FA37C', (v) =>
+        layout({ glowColor: v }),
+      ),
+      rangeField(t('glowSize'), lay?.glowSize ?? 28, 0, 80, 1, (v) => layout({ glowSize: v })),
       btn(t('resetLayout'), () => {
         this.editor.resetPortraitLayout(userId);
         this.hooks.refresh();
@@ -239,8 +249,33 @@ export class Inspector {
       return wrap;
     };
 
+    this.root.append(layerRow('frame', t('frameLayer')));
+
+    // позиция/размер/замок рамки — если рамка загружена
+    const fb = this.scene.manifest.edit?.frameBox;
+    if (this.scene.manifest.layers?.frame && fb) {
+      const setFb = (patch: Parameters<EditorState['setFrameBox']>[0]) => {
+        this.editor.setFrameBox(patch);
+        this.hooks.refresh();
+      };
+      this.root.append(
+        row(
+          numField(t('posX'), fb.x, (v) => setFb({ x: v })),
+          numField(t('posY'), fb.y, (v) => setFb({ y: v })),
+        ),
+        row(
+          numField(t('width'), fb.w, (v) => setFb({ w: v })),
+          numField(t('height'), fb.h, (v) => setFb({ h: v })),
+        ),
+        checkField(`🔒 ${t('lockFrame')}`, fb.locked ?? false, (v) => {
+          setFb({ locked: v });
+          this.rebuild();
+        }),
+        h('p', 'hint', t('frameHint')),
+      );
+    }
+
     this.root.append(
-      layerRow('frame', t('frameLayer')),
       layerRow('background', t('bgLayer')),
       layerRow('bricks', t('bricksLayer')),
       h('p', 'hint', t('bricksHint')),
@@ -256,7 +291,9 @@ export class Inspector {
       colorField(t('borderColor'), style.borderColor ?? '#39434f', (v) => setStyle({ borderColor: v })),
       colorField(t('speakingColor'), style.speakingColor ?? '#2FA37C', (v) => setStyle({ speakingColor: v })),
       rangeField(t('borderWidth'), style.borderWidth ?? 2, 0, 16, 1, (v) => setStyle({ borderWidth: v })),
-      rangeField(t('cornerRadius'), style.radius ?? 14, 0, 80, 1, (v) => setStyle({ radius: v })),
+      // до 200 — на больших портретах хватает до полного круга (рендер клампит min(w,h)/2)
+      rangeField(t('cornerRadius'), style.radius ?? 14, 0, 200, 1, (v) => setStyle({ radius: v })),
+      h('p', 'hint', t('radiusHint')),
     );
   }
 

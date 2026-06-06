@@ -395,9 +395,20 @@ window.__test = {
     editor!.setPortraitLayout(userId, patch);
     renderer!.refresh();
   },
+  setPhraseGain: (i: number, gain: number) => {
+    const ev = scene!.manifest.speakingEvents[i];
+    editor!.updateSpeakingEvent(i, { gain, srcStartMs: ev.srcStartMs ?? ev.startMs });
+    engine!.refreshMusic();
+  },
   setStyle: (patch: Record<string, string | number>) => {
     editor!.setStyle(patch);
   },
+  setLayerFromPath: async (layer: 'frame' | 'background' | 'bricks', p: string) => {
+    const bytes = new Uint8Array(await native.readFile(p));
+    await editor!.setLayerFile(layer, p.split(/[\\/]/).pop()!, bytes);
+    renderer!.refresh();
+  },
+  setFrameBox: (patch: Record<string, number | boolean>) => editor!.setFrameBox(patch),
   save: async (p: string) => {
     const data = editor!.saveBundle();
     await native.writeFile(p, data.slice().buffer as ArrayBuffer);

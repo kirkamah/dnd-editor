@@ -1,27 +1,59 @@
-:root {
-  --bg: #0b0d11;
-  --panel: #14181f;
-  --panel2: #181d26;
-  --text: #cfd8e3;
-  --muted: #6b7886;
+﻿/* ── Темы (палитры согласованы с другими no harm org приложениями) ── */
+:root,
+body[data-theme='dark'] {
+  --bg: #0e0f13;
+  --panel: #181a21;
+  --panel2: #1f222b;
+  --text: #e7e9ee;
+  --muted: #9aa0ad;
   --accent: #2fa37c;
-  --danger: #c95252;
-  --border: #2a323d;
-  --row-a: #10141a;
-  --row-b: #0e1116;
+  --accent2: #1f8c68;
+  --accent-text: #07120d;
+  --danger: #f06363;
+  --border: #2a2e3a;
+  --row-a: #14161c;
+  --row-b: #101218;
+  --preview-bg: #07090c;
 }
 
-body.light {
-  --bg: #f2f4f7;
+body[data-theme='light'] {
+  --bg: #eceef3;
   --panel: #ffffff;
-  --panel2: #e9edf2;
-  --text: #1d2733;
-  --muted: #5d6b7a;
-  --accent: #1f8c68;
-  --danger: #b33a3a;
-  --border: #c9d2dc;
-  --row-a: #e8ecf1;
-  --row-b: #eff2f6;
+  --panel2: #f1f3f8;
+  --text: #1d2128;
+  --muted: #5d6470;
+  --accent: #1c9e6f;
+  --accent2: #157a55;
+  --accent-text: #ffffff;
+  --danger: #d64545;
+  --border: #d3d8e2;
+  --row-a: #e7eaf1;
+  --row-b: #eef0f6;
+  --preview-bg: #d8dce5;
+}
+
+body[data-theme='space'] {
+  --bg: #0a0a1f;
+  --panel: #13132e;
+  --panel2: #1c1c40;
+  --text: #e8e5ff;
+  --muted: #9a97c8;
+  --accent: #a877ff;
+  --accent2: #7a44e0;
+  --accent-text: #120826;
+  --danger: #ff6b8a;
+  --border: #2e2e5c;
+  --row-a: #15153a;
+  --row-b: #101030;
+  --preview-bg: #050514;
+}
+body[data-theme='space'] {
+  background-image:
+    radial-gradient(2px 2px at 18% 28%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1.5px 1.5px at 68% 58%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 42% 82%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1.5px 1.5px at 85% 20%, rgba(168, 119, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 30% 60%, rgba(255, 255, 255, 0.3), transparent);
 }
 
 * {
@@ -61,7 +93,7 @@ button:hover {
 button.accent {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0b0d11;
+  color: var(--accent-text);
   font-weight: 600;
 }
 button.danger {
@@ -137,7 +169,7 @@ button.mini {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #07090c;
+  background: var(--preview-bg);
   min-width: 0;
   padding: 10px;
 }
@@ -234,10 +266,87 @@ button.mini {
   gap: 12px;
 }
 
+/* ── выбор темы (как в других no harm org приложениях) ── */
+.theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: 0.15s;
+}
+.theme-btn:hover {
+  border-color: var(--accent);
+}
+.theme-btn.active {
+  border-color: var(--accent);
+  background: var(--accent2);
+  color: #fff;
+}
+.theme-btn .sw {
+  display: inline-flex;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.theme-btn .sw span {
+  width: 11px;
+  height: 16px;
+  display: block;
+}
+
+/* ── блок об организации/авторе ── */
+.about-block {
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--accent);
+  line-height: 1.45;
+}
+.about-block .about-mark {
+  font-size: 26px;
+}
+.about-block .about-org {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.about-block .about-app {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.about-block .about-author {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.about-block .about-author b {
+  color: var(--text);
+}
+.about-block .about-copy {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
 #play-btn {
   background: var(--accent);
   border: none;
-  color: #0b0d11;
+  color: var(--accent-text);
   font-size: 15px;
   width: 36px;
   height: 36px;
@@ -252,7 +361,7 @@ button.mini {
 #timeline-wrap {
   height: 290px;
   display: flex;
-  background: #0e1116;
+  background: var(--row-b);
 }
 #track-headers {
   width: 170px;
@@ -268,7 +377,7 @@ button.mini {
   padding: 0 8px;
   font-size: 12px;
   color: var(--muted);
-  border-bottom: 1px solid #1a212b;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
   overflow: hidden;
 }

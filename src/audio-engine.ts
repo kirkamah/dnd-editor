@@ -132,9 +132,16 @@ export class AudioEngine {
   ): void {
     // реплики-клипы
     for (const ev of this.scene.manifest.speakingEvents) {
-      const dest = trackDest(ev.userId);
+      let dest = trackDest(ev.userId);
       const liveBuf = this.trackBuffers.get(ev.userId);
       if (!dest || !liveBuf) continue;
+      // v1.3: громкость отдельной реплики — свой GainNode перед дорожечным
+      if (ev.gain !== undefined && ev.gain !== 1) {
+        const g = ctx.createGain();
+        g.gain.value = ev.gain;
+        g.connect(dest);
+        dest = g;
+      }
       const buf = getTrackBuffer(ev.userId, liveBuf);
       const srcStartMs = ev.srcStartMs ?? ev.startMs;
       this.scheduleClip(ctx, dest, buf, when, playheadMs, ev.startMs, ev.endMs, srcStartMs, out);

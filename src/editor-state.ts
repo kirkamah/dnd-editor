@@ -7,6 +7,7 @@ import type { LoadedScene } from './core/bundle-loader';
 import { decodeImage, decodeMusic } from './core/bundle-loader';
 import type {
   EditData,
+  FrameBox,
   LayoutBox,
   MusicEntry,
   OverlayEntry,
@@ -244,7 +245,7 @@ export class EditorState {
   }
 
   setPortraitLayout(userId: string, patch: Partial<LayoutBox>): void {
-    const cur = this.portraitBox(userId);
+    const cur = { ...this.portraitBox(userId), ...this.edit().layout?.[userId] };
     const layout = (this.edit().layout ??= {});
     layout[userId] = {
       x: Math.round(patch.x ?? cur.x),
@@ -252,6 +253,9 @@ export class EditorState {
       w: Math.max(40, Math.round(patch.w ?? cur.w)),
       h: Math.max(40, Math.round(patch.h ?? cur.h)),
       hidden: patch.hidden ?? cur.hidden ?? false,
+      glow: patch.glow ?? cur.glow ?? true,
+      glowColor: patch.glowColor ?? cur.glowColor,
+      glowSize: patch.glowSize ?? cur.glowSize,
     };
     this.touch();
   }
@@ -275,11 +279,41 @@ export class EditorState {
     const path = await this.addImageFile(fileName, bytes);
     this.scene.manifest.layers ??= {};
     this.scene.manifest.layers[layer] = path;
+    if (layer === 'frame') {
+      // Рамка НЕ растягивается на всю сцену: ставим её в естественном размере
+      // по центру (с ужатием, если больше сцены) и разлоченной — двигай и
+      // подгоняй, потом фиксируй замочком.
+      const img = this.scene.images.get(path)!;
+      const scale = Math.min(1, SCENE_W / img.width, SCENE_H / img.height);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      this.edit().frameBox = {
+        x: Math.round((SCENE_W - w) / 2),
+        y: Math.round((SCENE_H - h) / 2),
+        w,
+        h,
+        locked: false,
+      };
+    }
     this.touch();
   }
 
   removeLayer(layer: 'frame' | 'background' | 'bricks'): void {
     if (this.scene.manifest.layers) delete this.scene.manifest.layers[layer];
+    if (layer === 'frame') delete this.edit().frameBox;
+    this.touch();
+  }
+
+  /** Положение/размер/блокировка рамки портретов. */
+  setFrameBox(patch: Partial<FrameBox>): void {
+    const cur = this.edit().frameBox ?? { x: 0, y: 0, w: SCENE_W, h: SCENE_H, locked: false };
+    this.edit().frameBox = {
+      x: Math.round(patch.x ?? cur.x),
+      y: Math.round(patch.y ?? cur.y),
+      w: Math.max(20, Math.round(patch.w ?? cur.w)),
+      h: Math.max(20, Math.round(patch.h ?? cur.h)),
+      locked: patch.locked ?? cur.locked ?? false,
+    };
     this.touch();
   }
 
@@ -312,7 +346,7 @@ export class EditorState {
 
   /** Собрать .dndsession: правки в манифесте, файлы — без перекодирования. */
   saveBundle(): Uint8Array {
-    this.scene.manifest.formatVersion = '1.2';
+    this.scene.manifest.formatVersion = '1.3';
     const zip: Zippable = {};
     for (const [path, bytes] of this.scene.rawFiles) {
       if (path === 'manifest.json') continue;

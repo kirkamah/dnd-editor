@@ -31,6 +31,8 @@ export interface SpeakingEvent {
    * Отсутствует — звук с позиции startMs (как записано ботом).
    */
   srcStartMs?: number;
+  /** v1.3: громкость этой реплики (умножается на громкость дорожки), по умолчанию 1 */
+  gain?: number;
 }
 
 export interface SceneCue {
@@ -73,13 +75,19 @@ export interface OverlayEntry {
   opacity: number;
 }
 
-/** v1.2: позиция/размер портрета, заданные в редакторе */
+/** v1.2: позиция/размер портрета; v1.3: + настройки свечения говорящего */
 export interface LayoutBox {
   x: number;
   y: number;
   w: number;
   h: number;
   hidden?: boolean;
+  /** свечение вокруг портрета, когда участник говорит (по умолчанию включено) */
+  glow?: boolean;
+  /** цвет свечения (по умолчанию style.speakingColor) */
+  glowColor?: string;
+  /** размах свечения, px сцены (по умолчанию 28) */
+  glowSize?: number;
 }
 
 /** v1.2: стиль обводки портретов */
@@ -90,12 +98,22 @@ export interface PortraitStyle {
   radius?: number;
 }
 
+/** v1.3: положение слоя frame (рамки портретов); locked — не таскается на превью */
+export interface FrameBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  locked?: boolean;
+}
+
 export interface EditData {
   tracks?: Record<string, TrackEdit>;
   music?: MusicEntry[];
   overlays?: OverlayEntry[];
   layout?: Record<string, LayoutBox>;
   style?: PortraitStyle;
+  frameBox?: FrameBox;
 }
 
 export interface Manifest {

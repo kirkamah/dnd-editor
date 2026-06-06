@@ -2,10 +2,13 @@
  * Главный процесс DnD Editor: окно + IPC-мост для диалогов, файловой системы
  * и ffmpeg (спавн дочерних процессов со стримингом кадров в stdin).
  */
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme } = require('electron');
 const { spawn, execFile } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
+
+// тёмный системный заголовок окна по умолчанию (тема приложения тёмная)
+nativeTheme.themeSource = 'dark';
 
 let win = null;
 
@@ -89,6 +92,11 @@ ipcMain.handle('fs:tempDir', () => {
 
 ipcMain.handle('shell:showInFolder', (_e, p) => {
   require('electron').shell.showItemInFolder(p);
+});
+
+// системный заголовок окна под цвет темы приложения
+ipcMain.handle('win:setTheme', (_e, theme) => {
+  nativeTheme.themeSource = theme === 'light' ? 'light' : 'dark';
 });
 
 // ---------- ffmpeg ----------
