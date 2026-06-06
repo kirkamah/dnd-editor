@@ -19,7 +19,7 @@ export interface PreviewHooks {
 }
 
 interface DragState {
-  kind: 'portrait' | 'overlay' | 'frame';
+  kind: 'portrait' | 'overlay' | 'frame' | 'plate';
   userId?: string;
   overlayIndex?: number;
   mode: 'move' | 'resize';
@@ -55,6 +55,23 @@ export class PreviewEdit {
   }
 
   private hit(x: number, y: number): DragState | null {
+    // таблички имён — поверх рамки, проверяются первыми
+    const plates = this.scene.manifest.edit?.plates ?? {};
+    for (const [userId, plate] of Object.entries(plates)) {
+      if (plate.hidden) continue;
+      const m = this.mode(x, y, plate);
+      if (m) {
+        return {
+          kind: 'plate',
+          userId,
+          mode: m,
+          grabX: x,
+          grabY: y,
+          box: { x: plate.x, y: plate.y, w: plate.w, h: plate.h },
+          ratio: plate.w / plate.h,
+        };
+      }
+    }
     // рамка портретов — наивысший слой; таскается, только пока не на замке
     const fb = this.scene.manifest.edit?.frameBox;
     if (fb && !fb.locked && this.scene.manifest.layers?.frame) {
@@ -122,7 +139,7 @@ export class PreviewEdit {
     if (!hit) return;
     this.drag = hit;
     this.hooks.setSelection(
-      hit.kind === 'portrait'
+      hit.kind === 'portrait' || hit.kind === 'plate'
         ? { type: 'participant', userId: hit.userId! }
         : hit.kind === 'frame'
           ? { type: 'scene' }
@@ -141,9 +158,9 @@ export class PreviewEdit {
     if (d.mode === 'move') {
       nb = { ...d.box, x: Math.round(d.box.x + dx), y: Math.round(d.box.y + dy) };
     } else {
-      const w = Math.max(40, Math.round(d.box.w + dx));
-      // портреты и рамка ресайзятся с сохранением пропорций, overlay — свободно
-      const keepRatio = d.kind === 'portrait' || d.kind === 'frame';
+      const w = Math.max(d.kind === 'plate' ? 24 : 40, Math.round(d.box.w + dx));
+      // портреты, рамка и таблички ресайзятся с пропорциями, overlay — свободно
+      const keepRatio = d.kind !== 'overlay';
       const h = keepRatio ? Math.round(w / d.ratio) : Math.max(40, Math.round(d.box.h + dy));
       nb = { ...d.box, w, h };
     }
@@ -152,6 +169,7 @@ export class PreviewEdit {
 
     if (d.kind === 'portrait') this.editor.setPortraitLayout(d.userId!, nb);
     else if (d.kind === 'frame') this.editor.setFrameBox(nb);
+    else if (d.kind === 'plate') this.editor.setPlateBox(d.userId!, nb);
     else this.editor.updateOverlay(d.overlayIndex!, nb);
     this.hooks.onEdited();
   }
@@ -178,7 +196,7 @@ export class PreviewEdit {
     } else if (sel?.type === 'overlay') {
       const ov = this.scene.manifest.edit?.overlays?.[sel.i];
       const t = stateAt(this.scene.manifest, this.hooks.playhead());
-      if (ov && t.overlays.includes(ov)) box = ov;
+      if (ov && t.overlays.some((a) => a.image === ov.image && a.startMs === ov.startMs)) box = ov;
     }
     if (!box) return;
 

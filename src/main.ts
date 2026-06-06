@@ -409,6 +409,12 @@ window.__test = {
     renderer!.refresh();
   },
   setFrameBox: (patch: Record<string, number | boolean>) => editor!.setFrameBox(patch),
+  updateOverlay: (i: number, patch: Record<string, unknown>) => editor!.updateOverlay(i, patch),
+  setPlateFromPath: async (userId: string, p: string) => {
+    const bytes = new Uint8Array(await native.readFile(p));
+    await editor!.setPlateFile(userId, p.split(/[\\/]/).pop()!, bytes);
+    renderer!.refresh();
+  },
   save: async (p: string) => {
     const data = editor!.saveBundle();
     await native.writeFile(p, data.slice().buffer as ArrayBuffer);

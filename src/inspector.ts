@@ -61,6 +61,10 @@ export class Inspector {
         this.editor.updateCue(i, { bricksOpacity: v });
         this.hooks.refresh();
       }),
+      numField(t('cueFade'), cue.fadeMs ?? 0, (v) => {
+        this.editor.updateCue(i, { fadeMs: Math.max(0, v) });
+        this.hooks.refresh();
+      }),
       this.imagePicker(t('bgFromHere'), cue.background, async (path) => {
         this.editor.updateCue(i, { background: path ?? undefined });
         this.hooks.refresh();
@@ -90,12 +94,46 @@ export class Inspector {
       numField(t('width'), ov.w, (v) => upd({ w: v })),
       numField(t('height'), ov.h, (v) => upd({ h: v })),
       rangeField(t('opacity'), ov.opacity, 0, 1, 0.01, (v) => upd({ opacity: v })),
+      this.layerPicker(ov.layer ?? 'default', (v) => {
+        upd({ layer: v });
+        this.rebuild();
+      }),
+      row(
+        numField(t('fadeIn'), ov.fadeInMs ?? 0, (v) => upd({ fadeInMs: Math.max(0, v) })),
+        numField(t('fadeOut'), ov.fadeOutMs ?? 0, (v) => upd({ fadeOutMs: Math.max(0, v) })),
+      ),
+      row(
+        btn(`▲ ${t('moveUp')}`, () => {
+          const ni = this.editor.moveOverlay(i, 1); // позже в списке = выше
+          this.hooks.setSelection({ type: 'overlay', i: ni });
+          this.hooks.refresh();
+          this.rebuild();
+        }),
+        btn(`▼ ${t('moveDown')}`, () => {
+          const ni = this.editor.moveOverlay(i, -1);
+          this.hooks.setSelection({ type: 'overlay', i: ni });
+          this.hooks.refresh();
+          this.rebuild();
+        }),
+      ),
       dangerBtn(t('deleteImage'), () => {
         this.editor.removeOverlay(i);
         this.hooks.setSelection(null);
         this.hooks.refresh();
       }),
     );
+  }
+
+  /** Выбор плана картинки: за кирпичами / под портретами / над / поверх рамки. */
+  private layerPicker(current: string, onPick: (v: 'back' | 'scene' | 'default' | 'front') => void) {
+    const wrap = h('label', 'field', t('overlayLayer'));
+    const sel = document.createElement('select');
+    for (const v of ['back', 'scene', 'default', 'front'] as const) {
+      sel.append(new Option(t(`layer_${v}`), v, false, v === current));
+    }
+    sel.onchange = () => onPick(sel.value as 'back' | 'scene' | 'default' | 'front');
+    wrap.append(sel);
+    return wrap;
   }
 
   private musicForm(i: number): void {
@@ -197,6 +235,14 @@ export class Inspector {
         numField(t('height'), box.h, (v) => layout({ h: v })),
       ),
       checkField(t('hidePortrait'), box.hidden ?? false, (v) => layout({ hidden: v })),
+      rangeField(
+        t('cornerRadius'),
+        lay?.radius ?? this.scene.manifest.edit?.style?.radius ?? 14,
+        0,
+        200,
+        1,
+        (v) => layout({ radius: v }),
+      ),
       checkField(t('glowEnabled'), lay?.glow ?? true, (v) => layout({ glow: v })),
       colorField(t('glowColor'), lay?.glowColor ?? this.scene.manifest.edit?.style?.speakingColor ?? '#2FA37C', (v) =>
         layout({ glowColor: v }),
@@ -209,6 +255,24 @@ export class Inspector {
       }),
       this.artBtn(p, 'idle', `${t('replaceIdle')}…`),
       this.artBtn(p, 'speaking', `${t('replaceSpeaking')}…`),
+      btn(`${t('uploadPlate')}…`, async () => {
+        const fp = await native.openFileDialog(t('image'), ['png', 'jpg', 'jpeg', 'webp']);
+        if (!fp) return;
+        const bytes = new Uint8Array(await native.readFile(fp));
+        await this.editor.setPlateFile(userId, fp.split(/[\\/]/).pop()!, bytes);
+        this.hooks.refresh();
+        this.rebuild();
+      }),
+      ...(this.scene.manifest.edit?.plates?.[userId]
+        ? [
+            h('p', 'hint', t('plateHint')),
+            dangerBtn(t('removePlate'), () => {
+              this.editor.removePlate(userId);
+              this.hooks.refresh();
+              this.rebuild();
+            }),
+          ]
+        : []),
       btn(t('addPhraseAtPlayhead'), () => {
         this.editor.addSpeakingEvent(userId, Math.round(this.hooks.playhead()));
         this.hooks.audioChanged();

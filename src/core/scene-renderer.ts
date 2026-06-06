@@ -4,9 +4,10 @@
  * рендера слоёв с прозрачным фоном — им пользуется экспорт под After Effects
  * (каждый слой отдельным видео с альфой).
  *
- * Слои снизу вверх (v1.3): bricks (переключаемая стена) -> background (рамка
- * фона, может иметь прозрачное окно) -> portraits -> overlays -> frame
- * (рамка портретов — наивысший слой).
+ * Слои снизу вверх (v1.4):
+ *   bricks (переключаемая стена) -> overlays[back] -> background (рамка фона)
+ *   -> overlays[scene] -> portraits -> overlays[default] -> frame (рамка
+ *   портретов) -> plates (таблички имён) -> overlays[front].
  */
 import type { LoadedScene } from './bundle-loader';
 import type { ParticipantEntry, PlayerSlot } from './types';
@@ -15,8 +16,15 @@ import type { SceneState } from './scene-state';
 export const SCENE_W = 1920;
 export const SCENE_H = 1080;
 
-export type LayerName = 'background' | 'bricks' | 'frame' | 'portraits' | 'overlays';
-export const ALL_LAYERS: LayerName[] = ['background', 'bricks', 'frame', 'portraits', 'overlays'];
+export type LayerName = 'background' | 'bricks' | 'frame' | 'portraits' | 'overlays' | 'plates';
+export const ALL_LAYERS: LayerName[] = [
+  'background',
+  'bricks',
+  'frame',
+  'portraits',
+  'overlays',
+  'plates',
+];
 
 export interface RenderOptions {
   /** какие слои рисовать (по умолчанию все) */
@@ -125,19 +133,38 @@ export class SceneRenderer {
     if (opts.transparent) ctx.clearRect(0, 0, SCENE_W, SCENE_H);
     else this.drawBase();
 
+    const plane = (name: 'back' | 'scene' | 'default' | 'front') => {
+      if (!layers.has('overlays')) return;
+      for (const ov of state.overlays) {
+        if ((ov.layer ?? 'default') === name) this.drawOverlay(ov);
+      }
+    };
+
+    plane('back'); // картинки даже ЗА переключаемым фоном (виднеются, когда кирпичи гаснут)
     if (layers.has('bricks')) this.drawBricks(state);
     if (layers.has('background')) this.drawBackground(state);
+    plane('scene');
     if (layers.has('portraits')) {
       for (const [p, box] of this.placed) {
         if (!box.hidden) this.drawPortrait(p, box, state.speaking.has(p.userId));
       }
     }
-    if (layers.has('overlays')) {
-      for (const ov of state.overlays) this.drawOverlay(ov);
-    }
-    if (layers.has('frame')) this.drawFrame(); // рамка портретов — наивысший слой
+    plane('default');
+    if (layers.has('frame')) this.drawFrame();
+    if (layers.has('plates')) this.drawPlates();
+    plane('front'); // самый верх
 
     ctx.restore();
+  }
+
+  /** Таблички с именами — выше рамки портретов. */
+  private drawPlates(): void {
+    const plates = this.scene.manifest.edit?.plates ?? {};
+    for (const plate of Object.values(plates)) {
+      if (plate.hidden) continue;
+      const img = this.scene.images.get(plate.image);
+      if (img) this.ctx.drawImage(img, plate.x, plate.y, plate.w, plate.h);
+    }
   }
 
   /** Базовая заливка под всеми слоями (видна сквозь прозрачные окна). */
@@ -156,13 +183,13 @@ export class SceneRenderer {
     y: number;
     w: number;
     h: number;
-    opacity: number;
+    effOpacity: number;
   }): void {
     const img = this.scene.images.get(ov.image);
     if (!img) return;
     const { ctx } = this;
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, ov.opacity));
+    ctx.globalAlpha = Math.max(0, Math.min(1, ov.effOpacity));
     ctx.drawImage(img, ov.x, ov.y, ov.w, ov.h);
     ctx.restore();
   }
@@ -203,13 +230,13 @@ export class SceneRenderer {
     const artRef = speaking ? (p.art?.speaking ?? p.art?.idle) : p.art?.idle;
     const img = artRef ? this.scene.images.get(artRef) : undefined;
     const style = this.scene.manifest.edit?.style;
-    // радиус клампится до полного круга
-    const r = Math.min(style?.radius ?? 14, box.w / 2, box.h / 2);
     const speakColor = style?.speakingColor ?? ACCENT;
     const borderColor = style?.borderColor ?? '#39434f';
     const borderWidth = style?.borderWidth ?? 2;
-    // v1.3: per-портретные настройки свечения
+    // v1.3: per-портретные настройки (свечение, своё скругление)
     const lay = this.scene.manifest.edit?.layout?.[p.userId];
+    // радиус: персональный -> общий стиль; клампится до полного круга
+    const r = Math.min(lay?.radius ?? style?.radius ?? 14, box.w / 2, box.h / 2);
     const glowOn = lay?.glow ?? true;
     const glowColor = lay?.glowColor ?? speakColor;
     const glowSize = lay?.glowSize ?? 28;
@@ -250,13 +277,16 @@ export class SceneRenderer {
     ctx.stroke();
     ctx.restore();
 
-    ctx.save();
-    ctx.fillStyle = speaking ? speakColor : '#cfd8e3';
-    ctx.font = `600 ${Math.round(box.nameH * 0.62)}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(p.characterName, box.x + box.w / 2, box.y + box.h + box.nameH / 2 + 2, box.w);
-    ctx.restore();
+    // текстовая подпись — только если у участника нет картинки-таблички
+    if (!this.scene.manifest.edit?.plates?.[p.userId]) {
+      ctx.save();
+      ctx.fillStyle = speaking ? speakColor : '#cfd8e3';
+      ctx.font = `600 ${Math.round(box.nameH * 0.62)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.characterName, box.x + box.w / 2, box.y + box.h + box.nameH / 2 + 2, box.w);
+      ctx.restore();
+    }
   }
 }
 

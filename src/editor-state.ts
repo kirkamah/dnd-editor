@@ -12,6 +12,7 @@ import type {
   MusicEntry,
   OverlayEntry,
   ParticipantEntry,
+  PlateEntry,
   PortraitStyle,
   SceneCue,
   SpeakingEvent,
@@ -178,6 +179,57 @@ export class EditorState {
     this.touch();
   }
 
+  /** Передвинуть картинку в списке (порядок = порядок отрисовки в своём плане). */
+  moveOverlay(i: number, dir: -1 | 1): number {
+    const list = this.edit().overlays ?? [];
+    const j = i + dir;
+    if (!list[i] || !list[j]) return i;
+    [list[i], list[j]] = [list[j], list[i]];
+    this.touch();
+    return j;
+  }
+
+  // ---------- таблички с именами (v1.4) ----------
+
+  /** Загрузить картинку-табличку участнику; ставится под низ его портрета. */
+  async setPlateFile(userId: string, fileName: string, bytes: Uint8Array): Promise<void> {
+    const path = this.uniquePath(`art/plate-${sanitize(fileName)}`);
+    this.scene.rawFiles.set(path, bytes);
+    const img = await decodeImage(bytes);
+    this.scene.images.set(path, img);
+    const box = this.portraitBox(userId);
+    // табличка обычно вытянута: ширина чуть шире портрета, высота по пропорции
+    const w = Math.round(box.w * 1.15);
+    const h = Math.round((w / img.width) * img.height);
+    const plates = (this.edit().plates ??= {});
+    plates[userId] = {
+      image: path,
+      x: Math.round(box.x + box.w / 2 - w / 2),
+      y: Math.round(box.y + box.h - h / 2), // перекрывает нижний край портрета
+      w,
+      h,
+    };
+    this.touch();
+  }
+
+  setPlateBox(userId: string, patch: Partial<PlateEntry>): void {
+    const plate = this.edit().plates?.[userId];
+    if (!plate) return;
+    Object.assign(plate, patch);
+    this.touch();
+  }
+
+  removePlate(userId: string): void {
+    const plates = this.edit().plates;
+    const gone = plates?.[userId];
+    if (plates && gone) {
+      delete plates[userId];
+      this.scene.rawFiles.delete(gone.image);
+      this.scene.images.delete(gone.image);
+    }
+    this.touch();
+  }
+
   // ---------- разрезание клипов (Ctrl+K на плейхеде) ----------
 
   /** Разрезать реплику i в момент atMs. Возвращает индекс второй половины. */
@@ -256,6 +308,7 @@ export class EditorState {
       glow: patch.glow ?? cur.glow ?? true,
       glowColor: patch.glowColor ?? cur.glowColor,
       glowSize: patch.glowSize ?? cur.glowSize,
+      radius: patch.radius ?? cur.radius,
     };
     this.touch();
   }
@@ -346,7 +399,7 @@ export class EditorState {
 
   /** Собрать .dndsession: правки в манифесте, файлы — без перекодирования. */
   saveBundle(): Uint8Array {
-    this.scene.manifest.formatVersion = '1.3';
+    this.scene.manifest.formatVersion = '1.4';
     const zip: Zippable = {};
     for (const [path, bytes] of this.scene.rawFiles) {
       if (path === 'manifest.json') continue;

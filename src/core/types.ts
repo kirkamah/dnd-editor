@@ -39,6 +39,8 @@ export interface SceneCue {
   tMs: number;
   bricksOpacity?: number;
   background?: string;
+  /** v1.4: плавный переход bricksOpacity к значению ключа (мс), 0 — мгновенно */
+  fadeMs?: number;
 }
 
 export interface Layers {
@@ -64,6 +66,9 @@ export interface MusicEntry {
   srcStartMs?: number;
 }
 
+/** v1.4: план, на котором рисуется overlay-картинка (снизу вверх) */
+export type OverlayLayer = 'back' | 'scene' | 'default' | 'front';
+
 export interface OverlayEntry {
   image: string; // путь в zip (art/...)
   startMs: number;
@@ -73,6 +78,12 @@ export interface OverlayEntry {
   w: number;
   h: number;
   opacity: number;
+  /** v1.4: back — за кирпичами, scene — под портретами, default — над ними, front — поверх рамки */
+  layer?: OverlayLayer;
+  /** v1.4: плавное появление, мс */
+  fadeInMs?: number;
+  /** v1.4: плавное исчезание, мс */
+  fadeOutMs?: number;
 }
 
 /** v1.2: позиция/размер портрета; v1.3: + настройки свечения говорящего */
@@ -88,6 +99,8 @@ export interface LayoutBox {
   glowColor?: string;
   /** размах свечения, px сцены (по умолчанию 28) */
   glowSize?: number;
+  /** скругление углов ЭТОГО портрета (по умолчанию style.radius; клампится до круга) */
+  radius?: number;
 }
 
 /** v1.2: стиль обводки портретов */
@@ -107,6 +120,16 @@ export interface FrameBox {
   locked?: boolean;
 }
 
+/** v1.4: табличка с именем персонажа — картинка выше рамки портретов */
+export interface PlateEntry {
+  image: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  hidden?: boolean;
+}
+
 export interface EditData {
   tracks?: Record<string, TrackEdit>;
   music?: MusicEntry[];
@@ -114,6 +137,7 @@ export interface EditData {
   layout?: Record<string, LayoutBox>;
   style?: PortraitStyle;
   frameBox?: FrameBox;
+  plates?: Record<string, PlateEntry>;
 }
 
 export interface Manifest {

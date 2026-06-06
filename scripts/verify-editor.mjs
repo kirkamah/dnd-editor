@@ -50,6 +50,13 @@ try {
   const uid = (m1.master ?? m1.players[0]).userId;
   await page.evaluate((u) => window.__test.setTrack(u, { gain: 0.7 }), uid);
 
+  // v1.4: планы картинок, фейды, табличка
+  await page.evaluate(async (u) => {
+    window.__test.updateOverlay(0, { layer: 'front', fadeInMs: 500, fadeOutMs: 800 });
+    window.__test.addCue({ tMs: 7000, bricksOpacity: 0.8, fadeMs: 1500 });
+    await window.__test.setPlateFromPath(u, 'C:/projects/dnd-editor/brand/logo-256.png');
+  }, uid);
+
   // v1.2: клипы, разрезание, лейаут, стиль
   await page.evaluate((u) => {
     // переезд первой реплики на 1с вперёд с сохранением источника звука
@@ -75,14 +82,18 @@ try {
   if (m.edit?.layout?.[uid]?.glow !== false) failures.push('настройка свечения не применилась');
   if (m.edit?.style?.borderColor !== '#ff0000') failures.push('стиль обводки не применился');
   if (m.speakingEvents[0]?.gain !== 0.4) failures.push('громкость фразы не применилась');
-  ok('правки: cue, музыка, картинка, громкости (дорожка+фраза), split, layout, glow, стиль');
+  if (m.edit?.overlays?.[0]?.layer !== 'front') failures.push('слой картинки не применился');
+  if (m.edit?.overlays?.[0]?.fadeInMs !== 500) failures.push('fadeIn не применился');
+  if (!m.sceneCues.some((c) => c.fadeMs === 1500)) failures.push('fadeMs ключа не применился');
+  if (!m.edit?.plates?.[uid]?.image) failures.push('табличка не добавилась');
+  ok('правки: cue+fade, музыка, картинка (слой front, фейды), табличка, громкости, split, layout, glow, стиль');
 
   await page.screenshot({ path: '.verify/editor-overlay.png' });
 
   // сохранение
   await page.evaluate((p) => window.__test.save(p), savedBundle);
   const m2 = await page.evaluate(() => window.__test.manifest());
-  if (m2.formatVersion !== '1.3') failures.push(`после сохранения formatVersion ${m2.formatVersion}, ожидалось 1.3`);
+  if (m2.formatVersion !== '1.4') failures.push(`после сохранения formatVersion ${m2.formatVersion}, ожидалось 1.4`);
   ok(`сохранено (v${m2.formatVersion}): ${(fs.statSync(savedBundle).size / 1024 / 1024).toFixed(1)} МБ`);
 
   // экспорт (оба режима)
