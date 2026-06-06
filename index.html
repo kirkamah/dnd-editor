@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/brand/logo.png" />
+    <title>DnD Editor</title>
+  </head>
+  <body>
+    <div id="welcome">
+      <img src="/brand/logo.svg" alt="no harm org" width="72" height="72" />
+      <h1>DnD Editor</h1>
+      <p>Редактор сессий <code>.dndsession</code>: таймлайн, музыка, картинки,<br />экспорт в mp4 и ассеты для After Effects.</p>
+      <button id="open-btn2" class="accent">Открыть сессию…</button>
+      <p class="hint" id="ffmpeg-status-w"></p>
+    </div>
+
+    <div id="workspace" class="hidden">
+      <div id="topbar">
+        <button id="open-btn">Открыть…</button>
+        <button id="save-btn">Сохранить</button>
+        <button id="saveas-btn">Сохранить как…</button>
+        <span class="sep"></span>
+        <button id="add-cue-btn" title="Ключ сцены на плейхеде">+ Ключ</button>
+        <button id="add-music-btn">+ Музыка…</button>
+        <button id="add-overlay-btn">+ Картинка…</button>
+        <span class="sep"></span>
+        <button id="export-btn" class="accent">Экспорт…</button>
+        <span id="ffmpeg-status" class="status"></span>
+      </div>
+
+      <div id="middle">
+        <div id="preview-wrap"><canvas id="preview"></canvas></div>
+        <div id="inspector"></div>
+      </div>
+
+      <div id="transport">
+        <button id="play-btn" title="Play/Pause (пробел)">▶</button>
+        <span id="timecode">00:00 / 00:00</span>
+        <span class="sep"></span>
+        <button id="zoom-out" title="Отдалить">−</button>
+        <button id="zoom-in" title="Приблизить">+</button>
+        <span class="hint">клик по таймлайну — плейхед · блоки можно тянуть и растягивать · Delete — удалить выбранное</span>
+      </div>
+
+      <div id="timeline-wrap">
+        <div id="track-headers"></div>
+        <div id="timeline-scroll"><canvas id="timeline"></canvas></div>
+      </div>
+    </div>
+
+    <div id="export-modal" class="hidden">
+      <div class="modal-box">
+        <h2>Экспорт</h2>
+        <div id="export-choices">
+          <button id="export-video" class="accent">Финальное видео (mp4)</button>
+          <button id="export-ae">Проект под After Effects</button>
+          <button id="export-both">И то и другое</button>
+        </div>
+        <div id="export-progress" class="hidden">
+          <p id="export-phase">…</p>
+          <progress id="export-bar" max="1" value="0"></progress>
+          <button id="export-cancel" class="danger">Отменить</button>
+        </div>
+        <button id="export-close" class="close">✕</button>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+    <footer>☮ <b>no harm org</b> · Kirkamah · © 2026 Kirkamah · no harm org</footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
