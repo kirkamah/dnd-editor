@@ -1,8 +1,10 @@
 /**
  * AudioEngine: воспроизведение в редакторе + офлайн-сведение для экспорта.
- * Дорожки участников — моно 48кГц c GainNode (громкость/мьют из manifest.edit),
- * музыка — AudioBuffer из бандла со своим стартом и громкостью.
- * Сведение: OfflineAudioContext тех же графов -> стерео WAV.
+ *
+ * v1.2 — КЛИПОВАЯ модель: звук участника = сумма его реплик-клипов
+ * (speakingEvents с srcStartMs), между клипами тишина. Двигаешь блок фразы —
+ * двигается и звук. Музыка — окно [startMs..endMs] со смещением srcStartMs
+ * внутри файла. Сведение: OfflineAudioContext тех же графов -> стерео WAV.
  */
 import type { LoadedScene } from './core/bundle-loader';
 
@@ -99,47 +101,80 @@ export class AudioEngine {
 
   private startSources(): void {
     const when = this.ctx.currentTime + 0.05;
-    const offsetSec = this.offsetMs / 1000;
     this.startCtxTime = when;
     this.sources = [];
-
-    for (const [userId, buf] of this.trackBuffers) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(this.trackGains.get(userId)!);
-      src.start(when, offsetSec);
-      this.sources.push(src);
-    }
-    this.scheduleMusic(this.ctx, this.ctx.destination, when, this.offsetMs, this.sources);
+    this.scheduleAll(
+      this.ctx,
+      when,
+      this.offsetMs,
+      (userId) => this.trackGains.get(userId) ?? null,
+      () => this.ctx.destination,
+      (userId, buf) => {
+        void userId;
+        return buf;
+      },
+      this.sources,
+    );
   }
 
   /**
-   * Планирование музыки относительно плейхеда — общая логика для живого
-   * воспроизведения и офлайн-сведения.
+   * Расписать ВСЕ клипы (реплики + музыка) относительно плейхеда.
+   * Общая логика живого воспроизведения и офлайн-сведения.
    */
-  private scheduleMusic(
+  private scheduleAll(
     ctx: BaseAudioContext,
-    dest: AudioNode,
     when: number,
     playheadMs: number,
+    trackDest: (userId: string) => AudioNode | null,
+    musicDest: () => AudioNode,
+    getTrackBuffer: (userId: string, fallback: AudioBuffer) => AudioBuffer,
     out: AudioBufferSourceNode[],
   ): void {
+    // реплики-клипы
+    for (const ev of this.scene.manifest.speakingEvents) {
+      const dest = trackDest(ev.userId);
+      const liveBuf = this.trackBuffers.get(ev.userId);
+      if (!dest || !liveBuf) continue;
+      const buf = getTrackBuffer(ev.userId, liveBuf);
+      const srcStartMs = ev.srcStartMs ?? ev.startMs;
+      this.scheduleClip(ctx, dest, buf, when, playheadMs, ev.startMs, ev.endMs, srcStartMs, out);
+    }
+    // музыка-окна
     for (const entry of this.scene.manifest.edit?.music ?? []) {
       const buf = this.scene.music.get(entry.file);
       if (!buf) continue;
       const gain = ctx.createGain();
       gain.gain.value = entry.gain;
-      gain.connect(dest);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(gain);
-
-      const relMs = playheadMs - entry.startMs; // куда плейхед попадает внутри трека
-      if (relMs < 0) src.start(when - relMs / 1000, 0);
-      else if (relMs / 1000 < buf.duration) src.start(when, relMs / 1000);
-      else continue; // музыка уже закончилась к этому моменту
-      out.push(src);
+      gain.connect(musicDest());
+      const srcStartMs = entry.srcStartMs ?? 0;
+      const maxLen = buf.duration * 1000 - srcStartMs;
+      const endMs = Math.min(entry.endMs ?? entry.startMs + maxLen, entry.startMs + maxLen);
+      this.scheduleClip(ctx, gain, buf, when, playheadMs, entry.startMs, endMs, srcStartMs, out);
     }
+  }
+
+  /** Один клип: на таймлайне [startMs..endMs], в источнике с srcStartMs. */
+  private scheduleClip(
+    ctx: BaseAudioContext,
+    dest: AudioNode,
+    buf: AudioBuffer,
+    when: number,
+    playheadMs: number,
+    startMs: number,
+    endMs: number,
+    srcStartMs: number,
+    out: AudioBufferSourceNode[],
+  ): void {
+    if (endMs <= playheadMs || endMs <= startMs) return; // клип уже позади
+    const skipMs = Math.max(0, playheadMs - startMs); // плейхед внутри клипа
+    const offsetSec = (srcStartMs + skipMs) / 1000;
+    const durSec = (endMs - startMs - skipMs) / 1000;
+    if (durSec <= 0 || offsetSec >= buf.duration) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(dest);
+    src.start(when + Math.max(0, startMs - playheadMs) / 1000, offsetSec, durSec);
+    out.push(src);
   }
 
   private stopSources(): void {
@@ -154,26 +189,35 @@ export class AudioEngine {
     this.sources = [];
   }
 
-  /** Офлайн-сведение всей сессии (дорожки с gain/mute + музыка) в стерео WAV. */
+  /** Офлайн-сведение всей сессии (клипы с gain/mute + музыка) в стерео WAV. */
   async renderMixWav(): Promise<ArrayBuffer> {
     const samples = Math.round((this.durationMs / 1000) * 48000);
     const off = new OfflineAudioContext(2, samples, 48000);
 
+    // оффлайн-копии дорожек и гейнов
+    const offBuffers = new Map<string, AudioBuffer>();
+    const offGains = new Map<string, GainNode>();
     for (const [userId, samplesF32] of this.scene.audio) {
       const e = this.scene.manifest.edit?.tracks?.[userId];
       const g = e?.muted ? 0 : (e?.gain ?? 1);
-      if (g === 0) continue;
       const buf = off.createBuffer(1, samplesF32.length, 48000);
       buf.copyToChannel(samplesF32, 0);
+      offBuffers.set(userId, buf);
       const gain = off.createGain();
       gain.gain.value = g;
       gain.connect(off.destination);
-      const src = off.createBufferSource();
-      src.buffer = buf;
-      src.connect(gain);
-      src.start(0);
+      offGains.set(userId, gain);
     }
-    this.scheduleMusic(off, off.destination, 0, 0, []);
+
+    this.scheduleAll(
+      off,
+      0,
+      0,
+      (userId) => offGains.get(userId) ?? null,
+      () => off.destination,
+      (userId, fallback) => offBuffers.get(userId) ?? fallback,
+      [],
+    );
 
     const rendered = await off.startRendering();
     return encodeWavStereo16(rendered);

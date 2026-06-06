@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Экспорт: финальный mp4 и/или «проект под After Effects».
  * Кадры рисует SceneRenderer (30 fps), сырые RGBA уходят пайпом в ffmpeg
  * через IPC. Звук сводится OfflineAudioContext'ом в WAV.
@@ -12,6 +12,7 @@ import { SceneRenderer, SCENE_W, SCENE_H, type LayerName } from './core/scene-re
 import { stateAt } from './core/scene-state';
 import { AudioEngine, encodeWavMono16 } from './audio-engine';
 import { fmtTime } from './timeline';
+import { t } from './i18n';
 
 export const FPS = 30;
 
@@ -64,7 +65,7 @@ async function streamFrames(
     for (let f = 0; f < totalFrames; f++) {
       if (job.isCancelled()) {
         await native.ffmpegKill(id);
-        throw new Error('Экспорт отменён');
+        throw new Error(t('exportCancelled'));
       }
       const tMs = (f / FPS) * 1000;
       const state = stateAt(scene.manifest, tMs);
@@ -86,7 +87,7 @@ const RAW_IN = ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${SCENE_W}x${SCENE_
 // ---------- финальное видео ----------
 
 async function exportVideo(job: ExportJob): Promise<string> {
-  job.onProgress({ phase: 'Свожу звук', done: 0, total: 1 });
+  job.onProgress({ phase: t('mixingAudio'), done: 0, total: 1 });
   const mixWav = await job.engine.renderMixWav();
   const tmp = await native.tempDir();
   const mixPath = `${tmp}\\mix.wav`;
@@ -105,7 +106,7 @@ async function exportVideo(job: ExportJob): Promise<string> {
       '-shortest',
       out,
     ],
-    'Рендер видео',
+    t('renderingVideo'),
     null,
   );
   return out;
@@ -123,14 +124,14 @@ async function exportAE(job: ExportJob): Promise<string[]> {
 
   // 1. Мультитрек: каждый участник отдельным WAV (исходный звук, без гейнов —
   //    громкость крутится в AE; применённые в редакторе значения — в README).
-  job.onProgress({ phase: 'Дорожки участников', done: 0, total: scene.participants.length });
+  job.onProgress({ phase: t('participantTracks'), done: 0, total: scene.participants.length });
   let n = 0;
   for (const p of scene.participants) {
     const samples = scene.audio.get(p.userId)!;
     const path = `${dir}\\audio\\${safe(p.characterName)}-${p.userId}.wav`;
     await native.writeFile(path, encodeWavMono16(samples));
     produced.push(path);
-    job.onProgress({ phase: 'Дорожки участников', done: ++n, total: scene.participants.length });
+    job.onProgress({ phase: t('participantTracks'), done: ++n, total: scene.participants.length });
   }
 
   // 2. Музыка отдельными WAV (конвертация ffmpeg'ом из исходного формата)
@@ -179,12 +180,12 @@ async function exportAE(job: ExportJob): Promise<string[]> {
     out,
   ];
   const portraitsOut = `${dir}\\layers\\portraits.mov`;
-  await streamFrames(job, prores(portraitsOut), 'Слой портретов (ProRes 4444)', new Set(['portraits']));
+  await streamFrames(job, prores(portraitsOut), t('portraitsLayer'), new Set(['portraits']));
   produced.push(portraitsOut);
 
   if ((m.edit?.overlays ?? []).length > 0) {
     const overlaysOut = `${dir}\\layers\\overlays.mov`;
-    await streamFrames(job, prores(overlaysOut), 'Слой картинок (ProRes 4444)', new Set(['overlays']));
+    await streamFrames(job, prores(overlaysOut), t('overlaysLayer'), new Set(['overlays']));
     produced.push(overlaysOut);
   }
 

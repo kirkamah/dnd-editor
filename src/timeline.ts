@@ -17,6 +17,7 @@ export type Selection =
   | { type: 'music'; i: number }
   | { type: 'speech'; i: number }
   | { type: 'participant'; userId: string }
+  | { type: 'scene' }
   | null;
 
 interface Row {
@@ -29,6 +30,8 @@ interface Hit {
   mode: 'move' | 'resize-l' | 'resize-r';
   startMs: number;
   endMs: number;
+  /** позиция звука в источнике на момент захвата (фразы и музыка) */
+  srcMs?: number;
 }
 
 export interface TimelineHooks {
@@ -38,6 +41,8 @@ export interface TimelineHooks {
   setSelection(sel: Selection): void;
   /** вызывается после живой правки перетаскиванием */
   onEdited(): void;
+  /** отпустили мышь после перетаскивания (пора перепланировать звук) */
+  onDragEnd?(): void;
 }
 
 export class Timeline {
@@ -57,7 +62,10 @@ export class Timeline {
     this.ctx = canvas.getContext('2d')!;
     canvas.addEventListener('mousedown', (e) => this.onDown(e));
     window.addEventListener('mousemove', (e) => this.onMove(e));
-    window.addEventListener('mouseup', () => (this.drag = null));
+    window.addEventListener('mouseup', () => {
+      if (this.drag?.kind === 'item') this.hooks.onDragEnd?.();
+      this.drag = null;
+    });
     canvas.addEventListener('mousemove', (e) => this.updateCursor(e));
   }
 
@@ -107,15 +115,20 @@ export class Timeline {
     const { ctx, canvas } = this;
     const m = this.scene.manifest;
     const sel = this.hooks.getSelection();
+    const css = getComputedStyle(document.body);
+    const rowA = css.getPropertyValue('--row-a') || '#10141a';
+    const rowB = css.getPropertyValue('--row-b') || '#0e1116';
+    const panel2 = css.getPropertyValue('--panel2') || '#161b22';
+    const muted = css.getPropertyValue('--muted') || '#6b7886';
 
-    ctx.fillStyle = '#0e1116';
+    ctx.fillStyle = rowB;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // линейка
-    ctx.fillStyle = '#161b22';
+    ctx.fillStyle = panel2;
     ctx.fillRect(0, 0, canvas.width, RULER_H);
     const stepMs = niceStep(this.pxPerMs);
-    ctx.fillStyle = '#6b7886';
+    ctx.fillStyle = muted;
     ctx.font = '10px system-ui';
     ctx.textBaseline = 'middle';
     for (let t = 0; t <= m.durationMs; t += stepMs) {
@@ -127,7 +140,7 @@ export class Timeline {
     const rows = this.rows();
     rows.forEach((row, ri) => {
       const y = RULER_H + ri * ROW_H;
-      ctx.fillStyle = ri % 2 ? '#10141a' : '#0e1116';
+      ctx.fillStyle = ri % 2 ? rowA : rowB;
       ctx.fillRect(0, y, canvas.width, ROW_H);
 
       if (row.kind === 'cues') {
@@ -142,10 +155,8 @@ export class Timeline {
         });
       } else if (row.kind === 'music') {
         (m.edit?.music ?? []).forEach((mu, i) => {
-          const buf = this.scene.music.get(mu.file);
-          const endMs = mu.startMs + (buf ? buf.duration * 1000 : 10_000);
           const selected = sel?.type === 'music' && sel.i === i;
-          this.block(mu.startMs, Math.min(endMs, m.durationMs), y, '#7c5cff', selected);
+          this.block(mu.startMs, Math.min(this.musicEnd(mu), m.durationMs), y, '#7c5cff', selected);
         });
       } else {
         m.speakingEvents.forEach((ev, i) => {
@@ -224,11 +235,11 @@ export class Timeline {
     } else if (row.kind === 'music') {
       const list = m.edit?.music ?? [];
       for (let i = list.length - 1; i >= 0; i--) {
-        const buf = this.scene.music.get(list[i].file);
-        const endMs = list[i].startMs + (buf ? buf.duration * 1000 : 10_000);
+        const endMs = this.musicEnd(list[i]);
         if (t >= list[i].startMs - tol && t <= endMs + tol) {
-          // у музыки ретаймится только старт (длина = длина файла)
-          return { sel: { type: 'music', i }, mode: 'move', startMs: list[i].startMs, endMs };
+          const hit = mk({ type: 'music', i }, list[i].startMs, endMs);
+          hit.srcMs = list[i].srcStartMs ?? 0;
+          return hit;
         }
       }
     } else {
@@ -236,11 +247,21 @@ export class Timeline {
         const ev = m.speakingEvents[i];
         if (ev.userId !== row.userId) continue;
         if (t >= ev.startMs - tol && t <= ev.endMs + tol) {
-          return mk({ type: 'speech', i }, ev.startMs, ev.endMs);
+          const hit = mk({ type: 'speech', i }, ev.startMs, ev.endMs);
+          hit.srcMs = ev.srcStartMs ?? ev.startMs;
+          return hit;
         }
       }
     }
     return null;
+  }
+
+  /** Конец музыкального окна с учётом endMs/srcStartMs и длины файла. */
+  musicEnd(mu: { file: string; startMs: number; endMs?: number; srcStartMs?: number }): number {
+    const buf = this.scene.music.get(mu.file);
+    const srcStart = mu.srcStartMs ?? 0;
+    const maxLen = buf ? buf.duration * 1000 - srcStart : 10_000;
+    return Math.min(mu.endMs ?? mu.startMs + maxLen, mu.startMs + maxLen);
   }
 
   private onDown(e: MouseEvent): void {
@@ -300,30 +321,66 @@ export class Timeline {
         });
       }
     } else if (sel.type === 'music') {
-      this.editor.updateMusic(sel.i, { startMs: Math.round(clamp(d.startMs + delta, 0, dur)) });
+      const len = d.endMs - d.startMs;
+      const srcGrab = d.srcMs ?? 0;
+      if (d.mode === 'move') {
+        const s = Math.round(clamp(d.startMs + delta, 0, dur - Math.min(len, dur)));
+        this.editor.updateMusic(sel.i, { startMs: s, endMs: s + len, srcStartMs: srcGrab });
+      } else if (d.mode === 'resize-l') {
+        // подрезка головы: вместе с краем сдвигается и точка в файле
+        const dd = Math.round(clamp(delta, -srcGrab, len - 100));
+        this.editor.updateMusic(sel.i, {
+          startMs: Math.round(clamp(d.startMs + dd, 0, d.endMs - 100)),
+          srcStartMs: srcGrab + dd,
+        });
+      } else {
+        const buf = this.scene.music.get(this.scene.manifest.edit!.music![sel.i].file);
+        const maxEnd = buf ? d.startMs + buf.duration * 1000 - srcGrab : dur;
+        this.editor.updateMusic(sel.i, {
+          endMs: Math.round(clamp(d.endMs + delta, d.startMs + 100, Math.min(dur, maxEnd))),
+        });
+      }
     } else if (sel.type === 'speech') {
       const ev = this.scene.manifest.speakingEvents[sel.i];
       if (!ev) return;
+      const srcGrab = d.srcMs ?? d.startMs;
       if (d.mode === 'move') {
+        // переезд клипа целиком: звук едет за блоком (src не меняется)
         const len = d.endMs - d.startMs;
         const s = Math.round(clamp(d.startMs + delta, 0, dur - len));
-        this.applySpeech(sel.i, s, s + len, d);
+        this.applySpeech(sel.i, { startMs: s, endMs: s + len, srcStartMs: srcGrab }, d);
       } else if (d.mode === 'resize-l') {
-        this.applySpeech(sel.i, Math.round(clamp(d.startMs + delta, 0, d.endMs - 50)), d.endMs, d);
+        // подрезка головы: srcStartMs сдвигается на ту же величину
+        const dd = Math.round(clamp(delta, -srcGrab, d.endMs - d.startMs - 50));
+        this.applySpeech(
+          sel.i,
+          { startMs: Math.round(clamp(d.startMs + dd, 0, d.endMs - 50)), endMs: d.endMs, srcStartMs: srcGrab + dd },
+          d,
+        );
       } else {
-        this.applySpeech(sel.i, d.startMs, Math.round(clamp(d.endMs + delta, d.startMs + 50, dur)), d);
+        this.applySpeech(
+          sel.i,
+          { startMs: d.startMs, endMs: Math.round(clamp(d.endMs + delta, d.startMs + 50, dur)), srcStartMs: srcGrab },
+          d,
+        );
       }
     }
     this.hooks.onEdited();
   }
 
   /** Ретайминг реплики с отслеживанием индекса после пересортировки. */
-  private applySpeech(i: number, startMs: number, endMs: number, d: { sel: Exclude<Selection, null> }): void {
+  private applySpeech(
+    i: number,
+    patch: { startMs: number; endMs: number; srcStartMs: number },
+    d: { sel: Exclude<Selection, null> },
+  ): void {
     const ev = this.scene.manifest.speakingEvents[i];
     const userId = ev.userId;
-    this.editor.updateSpeakingEvent(i, { startMs, endMs });
+    this.editor.updateSpeakingEvent(i, patch);
     const list = this.scene.manifest.speakingEvents;
-    const ni = list.findIndex((e) => e.userId === userId && e.startMs === startMs && e.endMs === endMs);
+    const ni = list.findIndex(
+      (e) => e.userId === userId && e.startMs === patch.startMs && e.endMs === patch.endMs,
+    );
     if (ni >= 0) {
       d.sel = { type: 'speech', i: ni };
       this.hooks.setSelection(d.sel);

@@ -7,6 +7,21 @@
   --accent: #2fa37c;
   --danger: #c95252;
   --border: #2a323d;
+  --row-a: #10141a;
+  --row-b: #0e1116;
+}
+
+body.light {
+  --bg: #f2f4f7;
+  --panel: #ffffff;
+  --panel2: #e9edf2;
+  --text: #1d2733;
+  --muted: #5d6b7a;
+  --accent: #1f8c68;
+  --danger: #b33a3a;
+  --border: #c9d2dc;
+  --row-a: #e8ecf1;
+  --row-b: #eff2f6;
 }
 
 * {
@@ -172,6 +187,52 @@ button.mini {
 .field input[type='range'] {
   accent-color: var(--accent);
 }
+.field input[type='color'] {
+  width: 56px;
+  height: 30px;
+  padding: 2px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.field-row {
+  display: flex;
+  gap: 10px;
+}
+.field-row .field {
+  flex: 1;
+}
+.dir-row {
+  display: flex;
+  gap: 6px;
+}
+.dir-label {
+  color: var(--text);
+  font-size: 12px;
+  word-break: break-all;
+}
+.about-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.about hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 8px 0;
+}
+.track-header.clickable {
+  cursor: pointer;
+}
+.track-header.clickable:hover {
+  color: var(--accent);
+}
+#settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 #play-btn {
   background: var(--accent);
@@ -241,7 +302,8 @@ button.mini {
 }
 
 /* ---- модалка экспорта ---- */
-#export-modal {
+#export-modal,
+#settings-modal {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);

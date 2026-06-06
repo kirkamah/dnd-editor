@@ -73,19 +73,46 @@ export function placeParticipants(
   return placed;
 }
 
+export interface EffectiveBox extends Box {
+  hidden: boolean;
+}
+
+/**
+ * Итоговые боксы портретов: дефолтный лейаут по слотам, поверх — правки
+ * из manifest.edit.layout (v1.2). Используется рендером и drag-редактором превью.
+ */
+export function effectiveBoxes(scene: LoadedScene): Map<ParticipantEntry, EffectiveBox> {
+  const placed = placeParticipants(scene.participants);
+  const out = new Map<ParticipantEntry, EffectiveBox>();
+  for (const [p, def] of placed) {
+    const o = scene.manifest.edit?.layout?.[p.userId];
+    const w = o?.w ?? def.w;
+    const h = o?.h ?? def.h;
+    out.set(p, {
+      x: o?.x ?? def.x,
+      y: o?.y ?? def.y,
+      w,
+      h,
+      nameH: Math.max(20, Math.round(h * 0.11)),
+      hidden: o?.hidden ?? false,
+    });
+  }
+  return out;
+}
+
 export class SceneRenderer {
-  private placed: Map<ParticipantEntry, Box>;
+  private placed: Map<ParticipantEntry, EffectiveBox>;
 
   constructor(
     private ctx: CanvasRenderingContext2D,
     private scene: LoadedScene,
   ) {
-    this.placed = placeParticipants(scene.participants);
+    this.placed = effectiveBoxes(scene);
   }
 
-  /** Перестроить лейаут после правок (например, замены слота). */
+  /** Перестроить лейаут после правок (слоты, edit.layout). */
   refresh(): void {
-    this.placed = placeParticipants(this.scene.participants);
+    this.placed = effectiveBoxes(this.scene);
   }
 
   render(state: SceneState, opts: RenderOptions = {}): void {
@@ -100,7 +127,7 @@ export class SceneRenderer {
     if (layers.has('frame')) this.drawFrame();
     if (layers.has('portraits')) {
       for (const [p, box] of this.placed) {
-        this.drawPortrait(p, box, state.speaking.has(p.userId));
+        if (!box.hidden) this.drawPortrait(p, box, state.speaking.has(p.userId));
       }
     }
     if (layers.has('overlays')) {
@@ -164,11 +191,15 @@ export class SceneRenderer {
     const { ctx } = this;
     const artRef = speaking ? (p.art?.speaking ?? p.art?.idle) : p.art?.idle;
     const img = artRef ? this.scene.images.get(artRef) : undefined;
-    const r = 14;
+    const style = this.scene.manifest.edit?.style;
+    const r = style?.radius ?? 14;
+    const speakColor = style?.speakingColor ?? ACCENT;
+    const borderColor = style?.borderColor ?? '#39434f';
+    const borderWidth = style?.borderWidth ?? 2;
 
     ctx.save();
     if (speaking) {
-      ctx.shadowColor = ACCENT;
+      ctx.shadowColor = speakColor;
       ctx.shadowBlur = 28;
     }
     ctx.fillStyle = '#10141a';
@@ -187,7 +218,7 @@ export class SceneRenderer {
     } else {
       ctx.fillStyle = speaking ? '#243b32' : '#1b222c';
       ctx.fillRect(box.x, box.y, box.w, box.h);
-      ctx.fillStyle = speaking ? ACCENT : '#52616f';
+      ctx.fillStyle = speaking ? speakColor : '#52616f';
       ctx.font = `bold ${Math.round(box.h * 0.45)}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -196,14 +227,14 @@ export class SceneRenderer {
     ctx.restore();
 
     ctx.save();
-    ctx.strokeStyle = speaking ? ACCENT : '#39434f';
-    ctx.lineWidth = speaking ? 4 : 2;
+    ctx.strokeStyle = speaking ? speakColor : borderColor;
+    ctx.lineWidth = speaking ? Math.max(borderWidth, borderWidth + 2) : borderWidth;
     roundRect(ctx, box.x, box.y, box.w, box.h, r);
     ctx.stroke();
     ctx.restore();
 
     ctx.save();
-    ctx.fillStyle = speaking ? ACCENT : '#cfd8e3';
+    ctx.fillStyle = speaking ? speakColor : '#cfd8e3';
     ctx.font = `600 ${Math.round(box.nameH * 0.62)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

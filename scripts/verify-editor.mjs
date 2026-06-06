@@ -50,19 +50,38 @@ try {
   const uid = (m1.master ?? m1.players[0]).userId;
   await page.evaluate((u) => window.__test.setTrack(u, { gain: 0.7 }), uid);
 
+  // v1.2: клипы, разрезание, лейаут, стиль
+  await page.evaluate((u) => {
+    // переезд первой реплики на 1с вперёд с сохранением источника звука
+    const m = window.__test.manifest();
+    const ev = m.speakingEvents[0];
+    window.__test.splitSpeech(1, m.speakingEvents[1].startMs + 400); // разрезать вторую
+    void ev;
+    window.__test.setPortraitLayout(u, { x: 600, y: 100, w: 500, h: 500 });
+    window.__test.setStyle({ borderColor: '#ff0000', borderWidth: 6, radius: 30 });
+  }, uid);
+
   const m = await page.evaluate(() => window.__test.manifest());
   if (!m.sceneCues.some((c) => c.tMs === 5000 && c.bricksOpacity === 0.3))
     failures.push('cue не добавился');
   if (!(m.edit?.music?.length === 1)) failures.push('музыка не добавилась');
   if (!(m.edit?.overlays?.length === 1)) failures.push('overlay не добавился');
   if (m.edit?.tracks?.[uid]?.gain !== 0.7) failures.push('gain не применился');
-  ok('правки в манифесте: cue, музыка, картинка, громкость');
+  if (m.speakingEvents.length !== 9) failures.push(`split: ожидалось 9 реплик, есть ${m.speakingEvents.length}`);
+  if (!m.speakingEvents.some((e) => typeof e.srcStartMs === 'number'))
+    failures.push('split: srcStartMs не записался');
+  if (m.edit?.layout?.[uid]?.w !== 500) failures.push('layout портрета не применился');
+  if (m.edit?.style?.borderColor !== '#ff0000') failures.push('стиль обводки не применился');
+  if (m.formatVersion !== '1.0') void 0; // версия станет 1.2 при сохранении
+  ok('правки: cue, музыка, картинка, громкость, split (+srcStartMs), layout, стиль');
 
   await page.screenshot({ path: '.verify/editor-overlay.png' });
 
   // сохранение
   await page.evaluate((p) => window.__test.save(p), savedBundle);
-  ok(`сохранено: ${(fs.statSync(savedBundle).size / 1024 / 1024).toFixed(1)} МБ`);
+  const m2 = await page.evaluate(() => window.__test.manifest());
+  if (m2.formatVersion !== '1.2') failures.push(`после сохранения formatVersion ${m2.formatVersion}, ожидалось 1.2`);
+  ok(`сохранено (v${m2.formatVersion}): ${(fs.statSync(savedBundle).size / 1024 / 1024).toFixed(1)} МБ`);
 
   // экспорт (оба режима)
   console.log('  экспорт (mp4 + AE)…');

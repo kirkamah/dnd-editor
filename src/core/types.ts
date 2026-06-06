@@ -26,6 +26,11 @@ export interface SpeakingEvent {
   userId: string;
   startMs: number;
   endMs: number;
+  /**
+   * v1.2: откуда в ИСХОДНОЙ дорожке берётся звук клипа (длина = endMs-startMs).
+   * Отсутствует — звук с позиции startMs (как записано ботом).
+   */
+  srcStartMs?: number;
 }
 
 export interface SceneCue {
@@ -51,6 +56,10 @@ export interface MusicEntry {
   file: string; // путь в zip (music/...)
   startMs: number;
   gain: number;
+  /** v1.2: конец окна на таймлайне (по умолчанию старт + длина файла) */
+  endMs?: number;
+  /** v1.2: смещение внутри файла (по умолчанию 0) */
+  srcStartMs?: number;
 }
 
 export interface OverlayEntry {
@@ -64,10 +73,29 @@ export interface OverlayEntry {
   opacity: number;
 }
 
+/** v1.2: позиция/размер портрета, заданные в редакторе */
+export interface LayoutBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  hidden?: boolean;
+}
+
+/** v1.2: стиль обводки портретов */
+export interface PortraitStyle {
+  borderColor?: string;
+  speakingColor?: string;
+  borderWidth?: number;
+  radius?: number;
+}
+
 export interface EditData {
   tracks?: Record<string, TrackEdit>;
   music?: MusicEntry[];
   overlays?: OverlayEntry[];
+  layout?: Record<string, LayoutBox>;
+  style?: PortraitStyle;
 }
 
 export interface Manifest {
