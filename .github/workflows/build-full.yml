@@ -1,0 +1,50 @@
+name: Build full (Boosty)
+
+# Builds the FULL (non-trial) Windows + macOS apps and uploads them as workflow
+# ARTIFACTS (not a public release) for manual upload to Boosty. Run manually.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - name: Build full Windows
+        shell: bash
+        run: |
+          npm run build
+          npx electron-builder --win --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dnd-editor-win
+          path: release/*.exe
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - name: Build full macOS (Intel + Apple Silicon)
+        run: |
+          npm run build
+          npx electron-builder --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dnd-editor-mac
+          path: release/*.zip
+          if-no-files-found: error

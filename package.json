@@ -43,6 +43,17 @@
     },
     "portable": {
       "artifactName": "DnD-Editor-${version}.exe"
+    },
+    "afterPack": "scripts/afterPack.cjs",
+    "mac": {
+      "icon": "brand/logo.png",
+      "category": "public.app-category.video",
+      "minimumSystemVersion": "11.0",
+      "identity": null,
+      "target": [
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "artifactName": "DnD-Editor-mac-${arch}.${ext}"
     }
   }
 }
