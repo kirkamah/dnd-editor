@@ -374,7 +374,7 @@ button.mini {
 }
 #timecode {
   font-variant-numeric: tabular-nums;
-  min-width: 110px;
+  min-width: 140px;
 }
 
 /* ---- таймлайн ---- */
@@ -429,10 +429,20 @@ button.mini {
   overflow-x: auto;
   overflow-y: hidden;
 }
+/* канвас виртуализирован: прокрутку задаёт spacer, канвас прилип к видимой области */
+#timeline-spacer {
+  position: relative;
+}
+#timeline {
+  position: sticky;
+  left: 0;
+  display: block;
+}
 
-/* ---- модалка экспорта ---- */
+/* ---- модалки ---- */
 #export-modal,
-#settings-modal {
+#settings-modal,
+#hotkeys-modal {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
@@ -478,6 +488,43 @@ button.mini {
   color: var(--muted);
 }
 
+/* ---- список горячих клавиш ---- */
+#hotkeys-modal .modal-box {
+  width: 600px;
+  max-height: 82vh;
+  overflow-y: auto;
+}
+#hotkeys-body h3 {
+  margin: 10px 0 2px;
+  font-size: 13px;
+  color: var(--accent);
+}
+.hk-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 7px 16px;
+  align-items: baseline;
+}
+.hk-keys {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.hk-desc {
+  color: var(--text);
+  font-size: 13px;
+}
+kbd {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+
 #toast {
   position: fixed;
   bottom: 40px;
@@ -506,4 +553,30 @@ footer {
   color: var(--muted);
   pointer-events: none;
   z-index: 5;
+}
+
+/* ── пробная версия ── */
+.trial-badge {
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid #e08a2e;
+  border-radius: 999px;
+  color: #e08a2e;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trial-hint {
+  font-style: italic;
+  opacity: 0.85;
+}
+.trial-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #e08a2e55;
+  border-radius: 8px;
+  background: #e08a2e14;
+}
+.trial-box .hint {
+  margin: 0 0 10px;
 }

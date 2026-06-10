@@ -38,16 +38,21 @@
 
       <div id="transport">
         <button id="play-btn" title="Play/Pause">▶</button>
-        <span id="timecode">00:00 / 00:00</span>
+        <span id="timecode">00:00.00 / 00:00</span>
         <span class="sep"></span>
-        <button id="zoom-out">−</button>
-        <button id="zoom-in">+</button>
+        <button id="zoom-out" title="−">−</button>
+        <button id="zoom-in" title="=">+</button>
+        <button id="zoom-fit" data-i18n-title="zoomFit">⟷</button>
+        <span class="sep"></span>
+        <button id="hotkeys-btn" data-i18n="hotkeys">⌨ Клавиши</button>
         <span class="hint" data-i18n="hintTimeline"></span>
       </div>
 
       <div id="timeline-wrap">
         <div id="track-headers"></div>
-        <div id="timeline-scroll"><canvas id="timeline"></canvas></div>
+        <div id="timeline-scroll">
+          <div id="timeline-spacer"><canvas id="timeline"></canvas></div>
+        </div>
       </div>
     </div>
 
@@ -73,6 +78,14 @@
         <h2 data-i18n="settingsTitle">Настройки</h2>
         <div id="settings-body"></div>
         <button id="settings-close" class="close">✕</button>
+      </div>
+    </div>
+
+    <div id="hotkeys-modal" class="hidden">
+      <div class="modal-box">
+        <h2 data-i18n="hotkeysTitle">Горячие клавиши</h2>
+        <div id="hotkeys-body"></div>
+        <button id="hotkeys-close" class="close">✕</button>
       </div>
     </div>
 

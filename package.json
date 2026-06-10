@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "app": "npm run build && electron .",
     "dist": "npm run build && electron-builder --win",
+    "dist:trial": "node scripts/build-trial.mjs",
     "verify": "node scripts/verify-editor.mjs"
   },
   "dependencies": {

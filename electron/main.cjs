@@ -94,6 +94,11 @@ ipcMain.handle('shell:showInFolder', (_e, p) => {
   require('electron').shell.showItemInFolder(p);
 });
 
+ipcMain.handle('shell:openExternal', (_e, url) => {
+  // только http(s) — не запускаем произвольные протоколы
+  if (/^https?:\/\//i.test(url)) require('electron').shell.openExternal(url);
+});
+
 // системный заголовок окна под цвет темы приложения
 ipcMain.handle('win:setTheme', (_e, theme) => {
   nativeTheme.themeSource = theme === 'light' ? 'light' : 'dark';

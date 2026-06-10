@@ -10,6 +10,7 @@ interface NativeApi {
   mkdir(path: string): Promise<void>;
   tempDir(): Promise<string>;
   showInFolder(path: string): Promise<void>;
+  openExternal(url: string): Promise<void>;
   setWindowTheme(theme: 'dark' | 'light'): Promise<void>;
 
   ffmpegCheck(): Promise<string | null>;

@@ -28,9 +28,62 @@ const dict: Record<string, { ru: string; en: string }> = {
 
   // transport
   hintTimeline: {
-    ru: 'клик по таймлайну — плейхед · блоки можно тянуть и растягивать · Ctrl+K — разрезать выбранное · Delete — удалить',
-    en: 'click timeline — playhead · drag/stretch blocks · Ctrl+K — split selected · Delete — remove',
+    ru: 'клик — плейхед · блоки тянутся и растягиваются · клипы липнут к краям (Alt — выкл) · Ctrl/Alt+колесо — зум',
+    en: 'click — playhead · drag/stretch blocks · clips snap to edges (Alt off) · Ctrl/Alt+wheel — zoom',
   },
+  zoomFit: { ru: 'Уместить всю запись (\\)', en: 'Fit whole recording (\\)' },
+
+  // горячие клавиши
+  hotkeys: { ru: '⌨ Клавиши', en: '⌨ Shortcuts' },
+  hotkeysTitle: { ru: 'Горячие клавиши', en: 'Keyboard shortcuts' },
+  hkTransport: { ru: 'Воспроизведение и навигация', en: 'Playback & navigation' },
+  hkEdit: { ru: 'Монтаж', en: 'Editing' },
+  hkView: { ru: 'Вид', en: 'View' },
+  hkFile: { ru: 'Файл', en: 'File' },
+  hkPlay: { ru: 'воспроизведение / пауза', en: 'play / pause' },
+  hkHomeEnd: { ru: 'в начало / в конец записи', en: 'to start / end of recording' },
+  hkFrame: { ru: 'кадр назад / вперёд (1/30 с)', en: 'frame back / forward (1/30 s)' },
+  hkSecond: { ru: 'на секунду назад / вперёд', en: 'one second back / forward' },
+  hkMinute: { ru: 'на минуту назад / вперёд', en: 'one minute back / forward' },
+  hkEditPoint: {
+    ru: 'к предыдущей / следующей границе клипа',
+    en: 'to previous / next clip boundary',
+  },
+  hkInOut: {
+    ru: 'к началу / концу клипа (выбранного или фразы у плейхеда)',
+    en: 'to start / end of clip (selected, or phrase at playhead)',
+  },
+  hkSplit: { ru: 'разрезать выбранный клип по плейхеду', en: 'split selected clip at playhead' },
+  hkDelete: { ru: 'удалить выбранное', en: 'delete selected' },
+  hkAlign: {
+    ru: 'придвинуть клип началом / концом к плейхеду',
+    en: 'move clip start / end to playhead',
+  },
+  hkTrim: {
+    ru: 'подрезать начало / конец клипа до плейхеда',
+    en: 'trim clip start / end to playhead',
+  },
+  hkNudge: {
+    ru: 'сдвинуть клип на кадр (с Shift — на секунду)',
+    en: 'nudge clip by a frame (with Shift — a second)',
+  },
+  hkMarker: { ru: 'ключ сцены на плейхеде', en: 'scene cue at playhead' },
+  hkDeselect: { ru: 'снять выделение / закрыть окно', en: 'deselect / close dialog' },
+  hkZoom: { ru: 'приблизить / отдалить таймлайн', en: 'zoom timeline in / out' },
+  hkFit: { ru: 'уместить всю запись по ширине', en: 'fit whole recording to width' },
+  hkWheel: {
+    ru: 'зум к курсору · просто колесо — прокрутка',
+    en: 'zoom at cursor · plain wheel — scroll',
+  },
+  hkWheelKeys: { ru: 'Ctrl/Alt+колесо', en: 'Ctrl/Alt+wheel' },
+  hkSnapDrag: {
+    ru: 'клипы липнут к краям и плейхеду · Alt — отключить · Shift при перетаскивании плейхеда — прилипание',
+    en: 'clips snap to edges and playhead · Alt — disable · Shift while dragging playhead — snap',
+  },
+  hkSave: { ru: 'сохранить / сохранить как', en: 'save / save as' },
+  hkOpen: { ru: 'открыть сессию', en: 'open session' },
+  hkHelp: { ru: 'этот список', en: 'this list' },
+  hkDrag: { ru: 'перетаскивание', en: 'dragging' },
 
   // ряды таймлайна
   rowScene: { ru: 'Сцена (ключи)', en: 'Scene (cues)' },
@@ -127,10 +180,20 @@ const dict: Record<string, { ru: string; en: string }> = {
   moveUp: { ru: 'Выше', en: 'Raise' },
   moveDown: { ru: 'Ниже', en: 'Lower' },
   uploadPlate: { ru: 'Загрузить табличку с именем', en: 'Upload name plate' },
+  plateIntro: {
+    ru: 'Табличка с именем под портретом — прямоугольник с надписью или своя картинка.',
+    en: 'A name plate under the portrait — a rectangle with text or your own image.',
+  },
+  addTextPlate: { ru: '+ Табличка с именем', en: '+ Name plate' },
+  plateAsImage: { ru: 'Табличка картинкой', en: 'Name plate from image' },
+  plateText: { ru: 'Текст таблички', en: 'Plate text' },
+  plateBg: { ru: 'Фон таблички', en: 'Plate background' },
+  plateColor: { ru: 'Цвет текста', en: 'Text color' },
+  plateFontSize: { ru: 'Кегль текста', en: 'Text size' },
   removePlate: { ru: 'Убрать табличку', en: 'Remove name plate' },
   plateHint: {
-    ru: 'Табличка рисуется выше рамки портретов и заменяет текстовую подпись. Таскай и растягивай её прямо на превью.',
-    en: 'The plate is drawn above the portrait frame and replaces the text label. Drag and resize it right on the preview.',
+    ru: 'Табличка рисуется выше рамки портретов и заменяет текстовую подпись. Таскай её и растягивай за угловую ручку прямо на превью; при переносе или ресайзе портрета она едет и масштабируется вместе с ним.',
+    en: 'The plate is drawn above the portrait frame and replaces the text label. Drag it and resize by the corner handle right on the preview; it follows the portrait when you move or resize it.',
   },
   frameHint: {
     ru: 'Пока рамка не на замке, её можно таскать и растягивать прямо на превью. Заблокируй — и клики снова попадают по портретам под ней.',
@@ -163,6 +226,19 @@ const dict: Record<string, { ru: string; en: string }> = {
     en: 'DnD Editor — an editor for .dndsession D&D recordings.\nPart of the series: recorder bot → player → editor.',
   },
   close: { ru: 'Закрыть', en: 'Close' },
+
+  // пробная версия
+  trialBadge: { ru: 'Пробная версия', en: 'Trial version' },
+  trialLockedFull: { ru: '🔒 Только в полной версии', en: '🔒 Full version only' },
+  trialTooLong: {
+    ru: 'Пробная версия открывает записи не длиннее 1 часа. Эта запись длиннее — откройте её в полной версии (Boosty).',
+    en: 'The trial opens recordings up to 1 hour. This one is longer — use the full version (Boosty).',
+  },
+  trialBoosty: { ru: 'Полная версия на Boosty', en: 'Full version on Boosty' },
+  trialAboutNote: {
+    ru: 'Пробная версия: записи до 1 часа, без своей музыки, без смены громкости голоса, без плавных переходов фона и замены аватаров. Полная версия снимает ограничения.',
+    en: 'Trial version: recordings up to 1 hour, no custom music, no voice volume changes, no background fades or avatar replacement. The full version removes all limits.',
+  },
 };
 
 let lang: Lang = (localStorage.getItem('dnd-editor-lang') as Lang) || 'ru';

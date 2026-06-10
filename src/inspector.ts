@@ -7,6 +7,7 @@ import type { EditorState } from './editor-state';
 import type { Selection } from './timeline';
 import { fmtTime } from './timeline';
 import { t } from './i18n';
+import { IS_TRIAL } from './trial';
 
 export interface InspectorHooks {
   playhead(): number;
@@ -61,10 +62,13 @@ export class Inspector {
         this.editor.updateCue(i, { bricksOpacity: v });
         this.hooks.refresh();
       }),
-      numField(t('cueFade'), cue.fadeMs ?? 0, (v) => {
-        this.editor.updateCue(i, { fadeMs: Math.max(0, v) });
-        this.hooks.refresh();
-      }),
+      // Пробная версия: плавный переход прозрачности фона недоступен.
+      IS_TRIAL
+        ? trialHint(`${t('cueFade')} · ${t('trialLockedFull')}`)
+        : numField(t('cueFade'), cue.fadeMs ?? 0, (v) => {
+            this.editor.updateCue(i, { fadeMs: Math.max(0, v) });
+            this.hooks.refresh();
+          }),
       this.imagePicker(t('bgFromHere'), cue.background, async (path) => {
         this.editor.updateCue(i, { background: path ?? undefined });
         this.hooks.refresh();
@@ -188,10 +192,13 @@ export class Inspector {
     this.root.append(
       this.msField(t('begin'), ev.startMs, (v) => retime({ startMs: v })),
       this.msField(t('end'), ev.endMs, (v) => retime({ endMs: v })),
-      rangeField(t('phraseVolume'), ev.gain ?? 1, 0, 2, 0.01, (v) => {
-        this.editor.updateSpeakingEvent(i, { gain: v, srcStartMs: ev.srcStartMs ?? ev.startMs });
-        this.hooks.audioChanged();
-      }),
+      // Пробная версия: громкость голоса участника не меняется.
+      IS_TRIAL
+        ? trialHint(`${t('phraseVolume')} · ${t('trialLockedFull')}`)
+        : rangeField(t('phraseVolume'), ev.gain ?? 1, 0, 2, 0.01, (v) => {
+            this.editor.updateSpeakingEvent(i, { gain: v, srcStartMs: ev.srcStartMs ?? ev.startMs });
+            this.hooks.audioChanged();
+          }),
       dangerBtn(t('deletePhrase'), () => {
         this.editor.removeSpeakingEvent(i);
         this.hooks.setSelection(null);
@@ -218,14 +225,19 @@ export class Inspector {
         this.editor.dirty = true;
         this.hooks.refresh();
       }),
-      rangeField(t('trackVolume'), te.gain, 0, 2, 0.01, (v) => {
-        this.editor.setTrack(userId, { gain: v });
-        this.hooks.audioChanged();
-      }),
-      checkField(t('mute'), te.muted, (v) => {
-        this.editor.setTrack(userId, { muted: v });
-        this.hooks.audioChanged();
-      }),
+      // Пробная версия: громкость голоса участника (дорожка + мьют) не меняется.
+      ...(IS_TRIAL
+        ? [trialHint(`${t('trackVolume')} · ${t('trialLockedFull')}`)]
+        : [
+            rangeField(t('trackVolume'), te.gain, 0, 2, 0.01, (v) => {
+              this.editor.setTrack(userId, { gain: v });
+              this.hooks.audioChanged();
+            }),
+            checkField(t('mute'), te.muted, (v) => {
+              this.editor.setTrack(userId, { muted: v });
+              this.hooks.audioChanged();
+            }),
+          ]),
       row(
         numField(t('posX'), box.x, (v) => layout({ x: v })),
         numField(t('posY'), box.y, (v) => layout({ y: v })),
@@ -253,26 +265,14 @@ export class Inspector {
         this.hooks.refresh();
         this.rebuild();
       }),
-      this.artBtn(p, 'idle', `${t('replaceIdle')}…`),
-      this.artBtn(p, 'speaking', `${t('replaceSpeaking')}…`),
-      btn(`${t('uploadPlate')}…`, async () => {
-        const fp = await native.openFileDialog(t('image'), ['png', 'jpg', 'jpeg', 'webp']);
-        if (!fp) return;
-        const bytes = new Uint8Array(await native.readFile(fp));
-        await this.editor.setPlateFile(userId, fp.split(/[\\/]/).pop()!, bytes);
-        this.hooks.refresh();
-        this.rebuild();
-      }),
-      ...(this.scene.manifest.edit?.plates?.[userId]
-        ? [
-            h('p', 'hint', t('plateHint')),
-            dangerBtn(t('removePlate'), () => {
-              this.editor.removePlate(userId);
-              this.hooks.refresh();
-              this.rebuild();
-            }),
-          ]
-        : []),
+      // Пробная версия: аватары участников нельзя менять прямо в приложении.
+      ...(IS_TRIAL
+        ? [trialHint(`${t('replaceIdle')} · ${t('trialLockedFull')}`)]
+        : [
+            this.artBtn(p, 'idle', `${t('replaceIdle')}…`),
+            this.artBtn(p, 'speaking', `${t('replaceSpeaking')}…`),
+          ]),
+      ...this.plateControls(userId),
       btn(t('addPhraseAtPlayhead'), () => {
         this.editor.addSpeakingEvent(userId, Math.round(this.hooks.playhead()));
         this.hooks.audioChanged();
@@ -361,6 +361,66 @@ export class Inspector {
     );
   }
 
+  // ---------- таблички с именами ----------
+
+  /** Контролы таблички: создать (текстом или картинкой) либо править существующую. */
+  private plateControls(userId: string): HTMLElement[] {
+    const plate = this.scene.manifest.edit?.plates?.[userId];
+    if (!plate) {
+      return [
+        h('p', 'hint', t('plateIntro')),
+        btn(t('addTextPlate'), () => {
+          this.editor.addTextPlate(userId);
+          this.hooks.refresh();
+          this.rebuild();
+        }),
+        btn(`${t('plateAsImage')}…`, async () => {
+          const fp = await native.openFileDialog(t('image'), ['png', 'jpg', 'jpeg', 'webp']);
+          if (!fp) return;
+          const bytes = new Uint8Array(await native.readFile(fp));
+          await this.editor.setPlateFile(userId, fp.split(/[\\/]/).pop()!, bytes);
+          this.hooks.refresh();
+          this.rebuild();
+        }),
+      ];
+    }
+    const out: HTMLElement[] = [];
+    // текстовая табличка (нет image) — поля надписи и стиля прямоугольника
+    if (!plate.image) {
+      out.push(
+        textField(t('plateText'), plate.text ?? '', (v) => {
+          this.editor.setPlateText(userId, v);
+          this.hooks.refresh();
+        }),
+        colorField(t('plateBg'), plate.bg ?? '#11151b', (v) => {
+          this.editor.setPlateBox(userId, { bg: v });
+          this.hooks.refresh();
+        }),
+        colorField(t('plateColor'), plate.color ?? '#e8edf3', (v) => {
+          this.editor.setPlateBox(userId, { color: v });
+          this.hooks.refresh();
+        }),
+        rangeField(t('plateFontSize'), plate.fontSize ?? Math.round(plate.h * 0.5), 10, 120, 1, (v) => {
+          this.editor.setPlateBox(userId, { fontSize: v });
+          this.hooks.refresh();
+        }),
+        rangeField(t('cornerRadius'), plate.radius ?? 12, 0, 80, 1, (v) => {
+          this.editor.setPlateBox(userId, { radius: v });
+          this.hooks.refresh();
+        }),
+      );
+    }
+    out.push(
+      h('p', 'hint', t('plateHint')),
+      dangerBtn(t('removePlate'), () => {
+        this.editor.removePlate(userId);
+        this.hooks.refresh();
+        this.rebuild();
+      }),
+    );
+    return out;
+  }
+
   // ---------- помощники с контекстом ----------
 
   private artBtn(p: { characterId: string; userId: string }, kind: 'idle' | 'speaking', label: string) {
@@ -429,6 +489,11 @@ function row(...children: HTMLElement[]): HTMLElement {
   const el = h('div', 'field-row');
   el.append(...children);
   return el;
+}
+
+/** Пометка о заблокированном в пробной версии контроле. */
+function trialHint(text: string): HTMLElement {
+  return h('p', 'hint trial-hint', text);
 }
 
 function btn(label: string, onClick: () => void): HTMLButtonElement {

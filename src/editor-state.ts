@@ -18,6 +18,7 @@ import type {
   SpeakingEvent,
 } from './core/types';
 import { SCENE_W, SCENE_H, effectiveBoxes } from './core/scene-renderer';
+import { IS_TRIAL } from './trial';
 
 export class EditorState {
   /** есть несохранённые правки */
@@ -40,6 +41,7 @@ export class EditorState {
   }
 
   setTrack(userId: string, patch: Partial<{ gain: number; muted: boolean }>): void {
+    if (IS_TRIAL) return; // пробная версия не меняет громкость голоса
     const tracks = (this.edit().tracks ??= {});
     tracks[userId] = { ...this.trackEdit(userId), ...patch };
     this.touch();
@@ -125,6 +127,8 @@ export class EditorState {
   }
 
   updateCue(i: number, patch: Partial<SceneCue>): void {
+    // пробная версия: без плавных переходов прозрачности фона
+    if (IS_TRIAL && patch.fadeMs) patch = { ...patch, fadeMs: 0 };
     const c = this.scene.manifest.sceneCues?.[i];
     if (c) Object.assign(c, patch);
     this.sortCues();
@@ -212,6 +216,35 @@ export class EditorState {
     this.touch();
   }
 
+  /** Текстовая табличка-прямоугольник с именем; ставится под низ портрета. */
+  addTextPlate(userId: string): void {
+    const p = this.scene.participants.find((x) => x.userId === userId);
+    const box = this.portraitBox(userId);
+    const w = Math.round(box.w * 1.3);
+    const h = Math.max(40, Math.round(box.nameH * 1.8));
+    const plates = (this.edit().plates ??= {});
+    plates[userId] = {
+      text: p?.characterName ?? '',
+      bg: '#11151b',
+      color: '#e8edf3',
+      radius: 12,
+      fontSize: Math.round(h * 0.5),
+      x: Math.round(box.x + box.w / 2 - w / 2),
+      y: Math.round(box.y + box.h - h / 2), // перекрывает нижний край портрета
+      w,
+      h,
+    };
+    this.touch();
+  }
+
+  /** Изменить надпись текстовой таблички. */
+  setPlateText(userId: string, text: string): void {
+    const plate = this.edit().plates?.[userId];
+    if (!plate) return;
+    plate.text = text;
+    this.touch();
+  }
+
   setPlateBox(userId: string, patch: Partial<PlateEntry>): void {
     const plate = this.edit().plates?.[userId];
     if (!plate) return;
@@ -224,8 +257,10 @@ export class EditorState {
     const gone = plates?.[userId];
     if (plates && gone) {
       delete plates[userId];
-      this.scene.rawFiles.delete(gone.image);
-      this.scene.images.delete(gone.image);
+      if (gone.image) {
+        this.scene.rawFiles.delete(gone.image);
+        this.scene.images.delete(gone.image);
+      }
     }
     this.touch();
   }
@@ -297,7 +332,8 @@ export class EditorState {
   }
 
   setPortraitLayout(userId: string, patch: Partial<LayoutBox>): void {
-    const cur = { ...this.portraitBox(userId), ...this.edit().layout?.[userId] };
+    const old = this.portraitBox(userId);
+    const cur = { ...old, ...this.edit().layout?.[userId] };
     const layout = (this.edit().layout ??= {});
     layout[userId] = {
       x: Math.round(patch.x ?? cur.x),
@@ -310,12 +346,34 @@ export class EditorState {
       glowSize: patch.glowSize ?? cur.glowSize,
       radius: patch.radius ?? cur.radius,
     };
+    this.syncPlate(userId, old, layout[userId]);
     this.touch();
   }
 
   resetPortraitLayout(userId: string): void {
+    const old = this.portraitBox(userId);
     delete this.edit().layout?.[userId];
+    this.syncPlate(userId, old, this.portraitBox(userId));
     this.touch();
+  }
+
+  /** Табличка приставлена к портрету: переезжает и масштабируется вместе с ним.
+   *  Координаты не округляются — иначе за длинное перетаскивание накопился бы дрейф. */
+  private syncPlate(
+    userId: string,
+    from: { x: number; y: number; w: number; h: number },
+    to: { x: number; y: number; w: number; h: number },
+  ): void {
+    const plate = this.edit().plates?.[userId];
+    if (!plate || from.w <= 0 || from.h <= 0) return;
+    const sx = to.w / from.w;
+    const sy = to.h / from.h;
+    plate.x = to.x + (plate.x - from.x) * sx;
+    plate.y = to.y + (plate.y - from.y) * sy;
+    plate.w = Math.max(24, plate.w * sx);
+    plate.h = Math.max(10, plate.h * sy);
+    // кегль текстовой таблички едет за высотой
+    if (plate.fontSize) plate.fontSize = Math.max(8, plate.fontSize * sy);
   }
 
   setStyle(patch: Partial<PortraitStyle>): void {

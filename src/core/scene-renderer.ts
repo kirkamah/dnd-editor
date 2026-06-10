@@ -10,7 +10,7 @@
  *   портретов) -> plates (таблички имён) -> overlays[front].
  */
 import type { LoadedScene } from './bundle-loader';
-import type { ParticipantEntry, PlayerSlot } from './types';
+import type { ParticipantEntry, PlateEntry, PlayerSlot } from './types';
 import type { SceneState } from './scene-state';
 
 export const SCENE_W = 1920;
@@ -157,14 +157,41 @@ export class SceneRenderer {
     ctx.restore();
   }
 
-  /** Таблички с именами — выше рамки портретов. */
+  /** Таблички с именами — выше рамки портретов (текстом или картинкой). */
   private drawPlates(): void {
     const plates = this.scene.manifest.edit?.plates ?? {};
     for (const plate of Object.values(plates)) {
       if (plate.hidden) continue;
-      const img = this.scene.images.get(plate.image);
-      if (img) this.ctx.drawImage(img, plate.x, plate.y, plate.w, plate.h);
+      if (plate.image) {
+        const img = this.scene.images.get(plate.image);
+        if (img) this.ctx.drawImage(img, plate.x, plate.y, plate.w, plate.h);
+      } else if (plate.text !== undefined) {
+        this.drawTextPlate(plate);
+      }
     }
+  }
+
+  /** Текстовая табличка: прямоугольник с фоном, обводкой и надписью по центру. */
+  private drawTextPlate(plate: PlateEntry): void {
+    const { ctx } = this;
+    const r = Math.min(plate.radius ?? 12, plate.w / 2, plate.h / 2);
+    const borderColor = this.scene.manifest.edit?.style?.speakingColor ?? ACCENT;
+    ctx.save();
+    roundRect(ctx, plate.x, plate.y, plate.w, plate.h, r);
+    ctx.fillStyle = plate.bg ?? '#11151b';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = borderColor;
+    roundRect(ctx, plate.x, plate.y, plate.w, plate.h, r);
+    ctx.stroke();
+    const fs = plate.fontSize ?? Math.round(plate.h * 0.5);
+    ctx.fillStyle = plate.color ?? '#e8edf3';
+    ctx.font = `600 ${fs}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // последний аргумент ужимает длинный текст по ширине таблички
+    ctx.fillText(plate.text ?? '', plate.x + plate.w / 2, plate.y + plate.h / 2 + 1, plate.w - 16);
+    ctx.restore();
   }
 
   /** Базовая заливка под всеми слоями (видна сквозь прозрачные окна). */

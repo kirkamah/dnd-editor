@@ -4,6 +4,7 @@
  * Хранение — localStorage. Тема красит и системный заголовок окна (IPC).
  */
 import { getLang, setLang, t, type Lang } from './i18n';
+import { IS_TRIAL, BOOSTY_URL } from './trial';
 
 export type ThemeName = 'dark' | 'light' | 'space';
 
@@ -121,6 +122,21 @@ export function buildSettingsModal(
   hint.className = 'hint';
   hint.textContent = t('defaultExportDirHint');
   root.append(hint);
+
+  // ── пробная версия: пометка и ссылка на полную (Boosty) ──
+  if (IS_TRIAL) {
+    const trial = document.createElement('div');
+    trial.className = 'trial-box';
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.innerHTML = `<b>${t('trialBadge')}.</b> ${t('trialAboutNote')}`;
+    const boosty = document.createElement('button');
+    boosty.className = 'accent';
+    boosty.textContent = t('trialBoosty');
+    boosty.onclick = () => void native.openExternal(BOOSTY_URL);
+    trial.append(note, boosty);
+    root.append(trial);
+  }
 
   // ── об организации и авторе (как в остальных приложениях no harm org) ──
   const about = document.createElement('div');

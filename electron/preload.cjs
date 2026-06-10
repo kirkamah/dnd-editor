@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('native', {
   mkdir: (p) => ipcRenderer.invoke('fs:mkdir', p),
   tempDir: () => ipcRenderer.invoke('fs:tempDir'),
   showInFolder: (p) => ipcRenderer.invoke('shell:showInFolder', p),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   setWindowTheme: (theme) => ipcRenderer.invoke('win:setTheme', theme),
 
   ffmpegCheck: () => ipcRenderer.invoke('ffmpeg:check'),

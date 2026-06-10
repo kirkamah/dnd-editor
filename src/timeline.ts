@@ -3,6 +3,12 @@
  * Ряды: cues сцены (ромбы) → overlay-картинки → музыка → речь по участникам.
  * Мышь: клик по пустому — плейхед; клик по элементу — выбор; перетаскивание
  * блока — сдвиг во времени; за края блока — ретайминг начала/конца.
+ *
+ * Канвас виртуализирован: его ширина = видимая область, прокрутку задаёт
+ * spacer-див, а отрисовка идёт со сдвигом scrollLeft. Поэтому зум не упирается
+ * в предел ширины canvas, а минимальный зум — «вся запись по ширине окна»
+ * (линейка никогда не отрывается от края). При сильном приближении на
+ * линейке появляются доли секунд.
  */
 import type { LoadedScene } from './core/bundle-loader';
 import type { EditorState } from './editor-state';
@@ -10,6 +16,9 @@ import type { EditorState } from './editor-state';
 export const RULER_H = 26;
 export const ROW_H = 30;
 const EDGE = 6; // зона захвата края блока, px
+const PAD = 20; // запас справа от конца записи, px
+const MAX_PX_PER_MS = 2; // максимальный зум (2000 px на секунду)
+const SNAP_PX = 8; // радиус прилипания, px
 
 export type Selection =
   | { type: 'cue'; i: number }
@@ -48,6 +57,10 @@ export interface TimelineHooks {
 export class Timeline {
   private ctx: CanvasRenderingContext2D;
   pxPerMs = 0.02;
+  private container: HTMLElement;
+  private spacer: HTMLElement;
+  /** точки прилипания, собранные в момент захвата */
+  private snaps: number[] = [];
   private drag:
     | null
     | { kind: 'playhead' }
@@ -60,6 +73,8 @@ export class Timeline {
     private hooks: TimelineHooks,
   ) {
     this.ctx = canvas.getContext('2d')!;
+    this.spacer = canvas.parentElement as HTMLElement;
+    this.container = this.spacer.parentElement as HTMLElement;
     canvas.addEventListener('mousedown', (e) => this.onDown(e));
     window.addEventListener('mousemove', (e) => this.onMove(e));
     window.addEventListener('mouseup', () => {
@@ -67,16 +82,74 @@ export class Timeline {
       this.drag = null;
     });
     canvas.addEventListener('mousemove', (e) => this.updateCursor(e));
+    // Ctrl/Alt+колесо — зум к курсору; просто колесо — горизонтальная прокрутка
+    this.container.addEventListener(
+      'wheel',
+      (e) => {
+        if (e.ctrlKey || e.altKey) {
+          e.preventDefault();
+          const r = this.canvas.getBoundingClientRect();
+          this.zoom(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - r.left);
+        } else if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          e.preventDefault();
+          this.container.scrollLeft += e.deltaY;
+        }
+      },
+      { passive: false },
+    );
+    // окно растянули/сжали — пересчитать минимальный зум и ширину канваса
+    new ResizeObserver(() => {
+      this.pxPerMs = clamp(this.pxPerMs, this.minPxPerMs(), MAX_PX_PER_MS);
+      this.resize();
+    }).observe(this.container);
   }
 
-  fitToWidth(containerW: number): void {
-    this.pxPerMs = Math.max(0.0005, containerW / Math.max(1, this.scene.manifest.durationMs));
-    this.resize();
+  private get scrollX(): number {
+    return this.container.scrollLeft;
   }
 
-  zoom(mult: number): void {
-    this.pxPerMs = Math.min(2, Math.max(0.0005, this.pxPerMs * mult));
+  private viewW(): number {
+    return this.container.clientWidth || 1;
+  }
+
+  /** минимальный зум: вся запись ровно по ширине видимой области */
+  private minPxPerMs(): number {
+    return Math.max(1e-6, (this.viewW() - PAD) / Math.max(1, this.scene.manifest.durationMs));
+  }
+
+  fitToWidth(): void {
+    this.pxPerMs = this.minPxPerMs();
     this.resize();
+    this.container.scrollLeft = 0;
+  }
+
+  /** Зум с фиксированной точкой: время под anchorPx (px от левого края видимой
+   *  области) остаётся на месте. Без anchorPx — плейхед, если он виден, иначе центр. */
+  zoom(mult: number, anchorPx?: number): void {
+    const a = anchorPx ?? this.defaultAnchor();
+    const t = (this.scrollX + a) / this.pxPerMs;
+    this.pxPerMs = clamp(this.pxPerMs * mult, this.minPxPerMs(), MAX_PX_PER_MS);
+    this.resize();
+    this.container.scrollLeft = Math.max(0, t * this.pxPerMs - a);
+  }
+
+  private defaultAnchor(): number {
+    const px = this.hooks.getPlayhead() * this.pxPerMs - this.scrollX;
+    return px >= 0 && px <= this.viewW() ? px : this.viewW() / 2;
+  }
+
+  /** Подскроллить, чтобы момент ms оказался в видимой области (для хоткеев). */
+  ensureVisible(ms: number): void {
+    const px = ms * this.pxPerMs;
+    if (px < this.scrollX + 4 || px > this.scrollX + this.viewW() - 4)
+      this.container.scrollLeft = Math.max(0, px - this.viewW() / 2);
+  }
+
+  /** Постраничное следование за плейхедом при воспроизведении (как в Premiere). */
+  followPlayhead(): void {
+    const px = this.hooks.getPlayhead() * this.pxPerMs;
+    if (px > this.scrollX + this.viewW() - 2 || px < this.scrollX)
+      this.container.scrollLeft = Math.max(0, px - 40);
   }
 
   rows(): Row[] {
@@ -93,8 +166,10 @@ export class Timeline {
   }
 
   resize(): void {
-    const w = Math.min(30000, Math.ceil(this.scene.manifest.durationMs * this.pxPerMs) + 20);
-    this.pxPerMs = (w - 20) / this.scene.manifest.durationMs;
+    const total = Math.ceil(this.scene.manifest.durationMs * this.pxPerMs) + PAD;
+    this.spacer.style.width = `${total}px`;
+    this.spacer.style.height = `${this.height()}px`;
+    const w = Math.min(total, this.viewW());
     this.canvas.width = w;
     this.canvas.height = this.height();
     this.canvas.style.width = `${w}px`;
@@ -102,11 +177,11 @@ export class Timeline {
   }
 
   private x(ms: number): number {
-    return ms * this.pxPerMs;
+    return ms * this.pxPerMs - this.scrollX;
   }
 
   private ms(x: number): number {
-    return Math.max(0, Math.min(this.scene.manifest.durationMs, x / this.pxPerMs));
+    return Math.max(0, Math.min(this.scene.manifest.durationMs, (x + this.scrollX) / this.pxPerMs));
   }
 
   // ---------- отрисовка ----------
@@ -124,17 +199,26 @@ export class Timeline {
     ctx.fillStyle = rowB;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // линейка
+    // линейка: рисуем только видимый диапазон; при сильном зуме — доли секунд
     ctx.fillStyle = panel2;
     ctx.fillRect(0, 0, canvas.width, RULER_H);
     const stepMs = niceStep(this.pxPerMs);
+    const decimals = stepMs >= 1000 ? 0 : stepMs >= 100 ? 1 : stepMs >= 10 ? 2 : 3;
+    const tEnd = Math.min(m.durationMs, this.ms(canvas.width));
     ctx.fillStyle = muted;
     ctx.font = '10px system-ui';
     ctx.textBaseline = 'middle';
-    for (let t = 0; t <= m.durationMs; t += stepMs) {
+    // мелкие промежуточные деления (1/5 шага) — как в AE
+    const sub = stepMs / 5;
+    if (sub * this.pxPerMs >= 5) {
+      const s0 = Math.floor(this.scrollX / this.pxPerMs / sub) * sub;
+      for (let t = s0; t <= tEnd; t += sub) ctx.fillRect(this.x(t), RULER_H - 3, 1, 3);
+    }
+    const t0 = Math.floor(this.scrollX / this.pxPerMs / stepMs) * stepMs;
+    for (let t = t0; t <= tEnd; t += stepMs) {
       const px = this.x(t);
-      ctx.fillRect(px, RULER_H - 6, 1, 6);
-      ctx.fillText(fmtTime(t), px + 3, RULER_H / 2);
+      ctx.fillRect(px, RULER_H - 7, 1, 7);
+      ctx.fillText(fmtTime(t, decimals), px + 3, RULER_H / 2);
     }
 
     const rows = this.rows();
@@ -183,6 +267,7 @@ export class Timeline {
     const { ctx } = this;
     const x = this.x(startMs);
     const w = Math.max(3, this.x(endMs) - x);
+    if (x + w < 0 || x > this.canvas.width) return; // за пределами видимого
     ctx.fillStyle = color + (selected ? '' : '99');
     ctx.beginPath();
     ctx.roundRect(x, rowY + 5, w, ROW_H - 10, 4);
@@ -194,6 +279,40 @@ export class Timeline {
     }
   }
 
+  // ---------- прилипание ----------
+
+  /** Все края клипов/ключей + начало/конец записи (+ плейхед для блоков). */
+  private collectSnaps(except?: Exclude<Selection, null>): number[] {
+    const m = this.scene.manifest;
+    const out: number[] = [0, m.durationMs];
+    if (except) out.push(this.hooks.getPlayhead());
+    (m.sceneCues ?? []).forEach((c, i) => {
+      if (!(except?.type === 'cue' && except.i === i)) out.push(c.tMs);
+    });
+    (m.edit?.overlays ?? []).forEach((o, i) => {
+      if (!(except?.type === 'overlay' && except.i === i)) out.push(o.startMs, o.endMs);
+    });
+    (m.edit?.music ?? []).forEach((mu, i) => {
+      if (!(except?.type === 'music' && except.i === i)) out.push(mu.startMs, this.musicEnd(mu));
+    });
+    m.speakingEvents.forEach((ev, i) => {
+      if (!(except?.type === 'speech' && except.i === i)) out.push(ev.startMs, ev.endMs);
+    });
+    return out;
+  }
+
+  /** Сдвиг к ближайшей точке прилипания (или 0, если рядом ничего нет). */
+  private snapAdjust(edges: number[]): number {
+    const tol = SNAP_PX / this.pxPerMs;
+    let best: number | null = null;
+    for (const e of edges)
+      for (const s of this.snaps) {
+        const d = s - e;
+        if (Math.abs(d) <= tol && (best === null || Math.abs(d) < Math.abs(best))) best = d;
+      }
+    return best ?? 0;
+  }
+
   // ---------- мышь ----------
 
   private hitTest(x: number, y: number): Hit | null {
@@ -202,7 +321,7 @@ export class Timeline {
     const row = this.rows()[ri];
     if (!row) return null;
     const m = this.scene.manifest;
-    const t = x / this.pxPerMs;
+    const t = this.ms(x);
     const tol = 8 / this.pxPerMs; // 8px в мс
 
     const mk = (
@@ -271,9 +390,11 @@ export class Timeline {
     const hit = this.hitTest(x, y);
     if (hit) {
       this.hooks.setSelection(hit.sel);
+      this.snaps = this.collectSnaps(hit.sel);
       this.drag = { kind: 'item', grabMs: this.ms(x), ...hit };
     } else {
       this.hooks.setSelection(null);
+      this.snaps = this.collectSnaps();
       this.hooks.setPlayhead(this.ms(x));
       this.drag = { kind: 'playhead' };
     }
@@ -281,18 +402,36 @@ export class Timeline {
 
   private onMove(e: MouseEvent): void {
     if (!this.drag) return;
+    // авто-прокрутка, когда тянем за край видимой области
+    const rc = this.container.getBoundingClientRect();
+    if (e.clientX > rc.right - 16) this.container.scrollLeft += Math.min(40, e.clientX - (rc.right - 16));
+    else if (e.clientX < rc.left + 16) this.container.scrollLeft -= Math.min(40, rc.left + 16 - e.clientX);
+
     const r = this.canvas.getBoundingClientRect();
-    const t = this.ms(e.clientX - r.left);
+    let t = this.ms(e.clientX - r.left);
 
     if (this.drag.kind === 'playhead') {
+      // Shift — прилипание плейхеда к краям клипов
+      if (e.shiftKey) t += this.snapAdjust([t]);
       this.hooks.setPlayhead(t);
       return;
     }
 
     const d = this.drag;
-    const delta = t - d.grabMs;
+    let delta = t - d.grabMs;
     const dur = this.scene.manifest.durationMs;
     const sel = d.sel;
+
+    // прилипание двигаемого края к краям соседей и плейхеду (Alt — отключить)
+    if (!e.altKey) {
+      const edges =
+        d.mode === 'resize-l'
+          ? [d.startMs + delta]
+          : d.mode === 'resize-r'
+            ? [d.endMs + delta]
+            : [d.startMs + delta, d.endMs + delta];
+      delta += this.snapAdjust(edges);
+    }
 
     if (sel.type === 'cue') {
       this.editor.updateCue(sel.i, { tMs: Math.round(clamp(d.startMs + delta, 0, dur)) });
@@ -415,12 +554,22 @@ function drawDiamond(ctx: CanvasRenderingContext2D, x: number, y: number, color:
 }
 
 function niceStep(pxPerMs: number): number {
-  const steps = [1000, 2000, 5000, 10000, 30000, 60000, 120000, 300000, 600000];
+  const steps = [
+    10, 20, 50, 100, 200, 500, // доли секунды — видны при сильном зуме
+    1000, 2000, 5000, 10000, 30000, 60000, 120000, 300000, 600000,
+  ];
   for (const s of steps) if (s * pxPerMs >= 70) return s;
   return 600000;
 }
 
-export function fmtTime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+/** mm:ss, с decimals>0 — с долями секунды (mm:ss.D / mm:ss.DD / mm:ss.DDD). */
+export function fmtTime(ms: number, decimals = 0): string {
+  const total = Math.max(0, Math.round(ms));
+  const mm = Math.floor(total / 60000);
+  const rest = total - mm * 60000;
+  const ss = Math.floor(rest / 1000);
+  const base = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  if (decimals <= 0) return base;
+  const frac = Math.floor((rest - ss * 1000) / 10 ** (3 - decimals));
+  return `${base}.${String(frac).padStart(decimals, '0')}`;
 }

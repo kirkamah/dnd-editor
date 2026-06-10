@@ -1,0 +1,47 @@
+name: Build macOS app
+
+# Builds the UNSIGNED macOS trial of DnD Editor (Intel + Apple Silicon) on a
+# cloud macOS runner and publishes the .zips to this repo's "mac" release.
+# No Apple Developer certificate: the app is ad-hoc signed (scripts/afterPack.cjs)
+# so it launches; the recipient clears Gatekeeper once via right-click → Open.
+# Per-arch (not universal): the universal merge breaks with ad-hoc signatures.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build macOS trial apps (Intel + Apple Silicon)
+        run: |
+          npm run build
+          npx electron-builder --mac --config electron-builder.trial.json --publish never
+        env:
+          DND_TRIAL: '1'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Publish to "mac" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mac
+          name: macOS build
+          body: 'Unsigned macOS trial builds (Intel + Apple Silicon). First launch — right-click the app, then Open.'
+          files: release-trial/DnD-Editor-mac-*.zip
+          fail_on_unmatched_files: true

@@ -190,6 +190,9 @@ export class PreviewEdit {
       for (const [p, b] of effectiveBoxes(this.scene)) {
         if (p.userId === sel.userId && !b.hidden) box = b;
       }
+      // у таблички своя рамка с ручкой — её можно двигать и ресайзить отдельно
+      const plate = this.scene.manifest.edit?.plates?.[sel.userId];
+      if (plate && !plate.hidden) this.selectionBox(ctx, plate, '#8ec7f0');
     } else if (sel?.type === 'scene') {
       const fb = this.scene.manifest.edit?.frameBox;
       if (fb && !fb.locked && this.scene.manifest.layers?.frame) box = fb;
@@ -199,14 +202,21 @@ export class PreviewEdit {
       if (ov && t.overlays.some((a) => a.image === ov.image && a.startMs === ov.startMs)) box = ov;
     }
     if (!box) return;
+    this.selectionBox(ctx, box, '#ffffff');
+  }
 
+  private selectionBox(
+    ctx: CanvasRenderingContext2D,
+    box: { x: number; y: number; w: number; h: number },
+    color: string,
+  ): void {
     ctx.save();
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = color;
     ctx.setLineDash([8, 6]);
     ctx.lineWidth = 2;
     ctx.strokeRect(box.x - 3, box.y - 3, box.w + 6, box.h + 6);
     ctx.setLineDash([]);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = color;
     ctx.fillRect(box.x + box.w - HANDLE / 2, box.y + box.h - HANDLE / 2, HANDLE, HANDLE);
     ctx.restore();
   }
